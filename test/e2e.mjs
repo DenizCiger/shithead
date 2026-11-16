@@ -15,16 +15,18 @@ for (const c of clients) {
     if (m.phase === 'swap' && !m.players[m.you].ready) c.ws.send(JSON.stringify({ type: 'ready' }));
     if (m.phase === 'finished' && !done) { done = true; console.log('FINISHED shithead=', m.players[m.shithead].name, 'moves', moves, 'parries', parried, 'deck was', 'ok'); process.exit(0); }
     if (m.phase !== 'playing') return;
-    if (m.pendingJoker && m.pendingJoker.parry) { if (m.pendingJoker.parry.to === m.you) { m.parryId != null && Math.random() < 0.7 ? (parried++, c.ws.send(JSON.stringify({ type: 'parry' }))) : c.ws.send(JSON.stringify({ type: 'accept' })); } return; }
-    if (m.pendingJoker && m.pendingJoker.by === m.you) { const t = m.players.find((p) => p.seat !== m.you); c.ws.send(JSON.stringify({ type: 'joker', target: t.seat })); return; }
+    if (m.pendingJoker && m.pendingJoker.parry) { if (m.pendingJoker.parry.to === m.you) { m.parryId != null ? (parried++, c.ws.send(JSON.stringify({ type: 'parry' }))) : c.ws.send(JSON.stringify({ type: 'accept' })); } return; }
+    if (m.pendingJoker && m.pendingJoker.by === m.you) { const others = m.players.filter((p) => p.seat !== m.you); const t = others[Math.floor(Math.random() * others.length)]; c.ws.send(JSON.stringify({ type: 'joker', target: t.seat })); return; }
     if (m.pendingJoker || m.current !== m.you) return;
     moves++;
     if (m.downIds.length) return c.ws.send(JSON.stringify({ type: 'play', ids: [m.downIds[0]] }));
     const zoneCards = m.zone === 'hand' ? m.hand : m.players[m.you].up;
-    const r = m.playable[0];
+    const jk = zoneCards.find((x) => x.rank === 15);
+    if (jk) return c.ws.send(JSON.stringify({ type: 'play', ids: [jk.id] })); // jokers first, to exercise parry
+    const r = m.playable[Math.random() < 0.25 ? Math.floor(Math.random() * m.playable.length) : 0]; // a little noise so naive bots cannot cycle forever
     if (r === undefined) return c.ws.send(JSON.stringify({ type: 'pickup' }));
     c.ws.send(JSON.stringify({ type: 'play', ids: [zoneCards.find((x) => x.rank === r).id] }));
   });
 }
 clients[0].ws.send(JSON.stringify({ type: 'create', name: 'A' }));
-setTimeout(() => { console.log('TIMEOUT'); process.exit(1); }, 20000);
+setTimeout(() => { const m = clients[0].st; console.log('TIMEOUT', m && { phase: m.phase, cur: m.current, pj: m.pendingJoker, pile: m.pileCount, moves }); process.exit(1); }, 20000);
