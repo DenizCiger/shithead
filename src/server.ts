@@ -15,8 +15,11 @@ const MIME: Record<string, string> = {
 };
 
 interface Seat { name: string; token: string; ws: WebSocket | null; bot?: boolean }
+interface Spec { name: string; token: string; ws: WebSocket | null; cam: number }
 interface Room {
   code: string;
+  hostToken: string;
+  specs: Spec[]; // spectators: watch only, see no hands
   seats: Seat[]; // seat index == engine seat
   game: E.State | null;
   lastActive: number;
@@ -53,17 +56,26 @@ const send = (ws: WebSocket | null, msg: unknown) => {
 const pubCard = (c: E.Card) => ({ id: c.id, rank: c.rank, suit: c.suit });
 
 /** Per-viewer projection: never leaks other hands, face-down cards or deck order. */
-function view(room: Room, seat: number) {
+type Viewer = { seat: number } | { spec: Spec };
+
+function view(room: Room, who: Viewer) {
   const g = room.game;
+  const spec = 'spec' in who ? who.spec : null;
+  const seat = spec ? Math.max(0, Math.min(spec.cam, (g?.players.length ?? 1) - 1)) : (who as { seat: number }).seat;
+  const token = spec ? spec.token : room.seats[seat]!.token;
   const base = {
     type: 'state',
     code: room.code,
-    you: seat,
-    host: seat === 0,
+    you: spec && !g ? -1 : seat, // a spectator's "you" is the seat whose side of the table they watch from
+    spectator: !!spec,
+    host: token === room.hostToken,
+    hostSeat: room.seats.findIndex((s) => s.token === room.hostToken),
     seats: room.seats.map((s, i) => ({ seat: i, name: s.name, connected: !!s.ws || !!s.bot, bot: !!s.bot })),
+    specs: room.specs.map((s, i) => ({ idx: i, name: s.name, connected: !!s.ws, host: s.token === room.hostToken, me: s === spec })),
   };
   if (!g) return { ...base, phase: 'lobby' };
   const me = g.players[seat]!;
+  const watching = !!spec;
   return {
     ...base,
     phase: g.phase,
@@ -86,18 +98,20 @@ function view(room: Room, seat: number) {
       ready: p.ready,
       active: E.isActive(g, i),
     })),
-    hand: me.hand.map(pubCard),
-    zone: E.zoneOf(me),
-    playable: E.playableRanks(g, seat),
-    canPickup: E.canPickup(g, seat),
-    parryId: g.pendingJoker?.parry?.to === seat ? (me.hand.find((c) => c.rank === E.JOKER)?.id ?? null) : null,
-    downIds: E.zoneOf(me) === 'down' && g.current === seat && g.phase === 'playing' && !g.pendingJoker ? me.down.map((c) => c.id) : [],
+    hand: watching ? [] : me.hand.map(pubCard),
+    zone: watching ? null : E.zoneOf(me),
+    playable: watching ? [] : E.playableRanks(g, seat),
+    canPickup: watching ? false : E.canPickup(g, seat),
+    parryId: watching ? null : g.pendingJoker?.parry?.to === seat ? (me.hand.find((c) => c.rank === E.JOKER)?.id ?? null) : null,
+    downIds: watching ? [] : E.zoneOf(me) === 'down' && g.current === seat && g.phase === 'playing' && !g.pendingJoker ? me.down.map((c) => c.id) : [],
   };
 }
 
 function broadcast(room: Room, events?: Ev[]) {
   room.lastActive = Date.now();
-  room.seats.forEach((s, i) => send(s.ws, events ? { ...view(room, i), events } : view(room, i)));
+  const out = (ws: WebSocket | null, who: Viewer) => send(ws, events ? { ...view(room, who), events } : view(room, who));
+  room.seats.forEach((s, i) => out(s.ws, { seat: i }));
+  room.specs.forEach((sp) => out(sp.ws, { spec: sp }));
   scheduleBots(room);
 }
 
@@ -132,7 +146,7 @@ function scheduleBots(room: Room) {
   if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = undefined; }
   const g = room.game;
   if (!g || g.phase === 'finished' || !room.seats.some((s) => s.bot)) return;
-  if (!room.seats.some((s) => s.ws)) return; // nobody watching: do not burn CPU
+  if (!room.seats.some((s) => s.ws) && !room.specs.some((s) => s.ws)) return; // nobody watching: do not burn CPU
   const acting = g.phase === 'swap'
     ? room.seats.findIndex((s, i) => s.bot && !g.players[i]!.ready)
     : (() => { const a = E.actingSeat(g); return room.seats[a]?.bot ? a : -1; })();
@@ -155,7 +169,7 @@ function scheduleBots(room: Room) {
   }, g.phase === 'swap' ? Math.min(600, BOT_DELAY) : BOT_DELAY);
 }
 
-interface Conn { room?: Room; seat?: number }
+interface Conn { room?: Room; seat?: number; spec?: Spec }
 const conns = new WeakMap<WebSocket, Conn>();
 
 const cleanName = (n: unknown) => String(n ?? '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Player';
@@ -168,30 +182,43 @@ function handle(ws: WebSocket, msg: any) {
     case 'create': {
       const code = genCode();
       const token = randomBytes(12).toString('hex');
-      const room: Room = { code, seats: [{ name: cleanName(msg.name), token, ws }], game: null, lastActive: Date.now() };
+      const room: Room = { code, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
+      if (msg.spectate) {
+        const sp: Spec = { name: cleanName(msg.name), token, ws, cam: 0 };
+        room.specs.push(sp); conn.spec = sp;
+      } else { room.seats.push({ name: cleanName(msg.name), token, ws }); conn.seat = 0; }
       rooms.set(code, room);
-      conn.room = room; conn.seat = 0;
-      send(ws, { type: 'joined', code, token, seat: 0 });
+      conn.room = room;
+      send(ws, { type: 'joined', code, token, seat: conn.seat ?? -1 });
       return broadcast(room);
     }
     case 'join': {
       const room = rooms.get(String(msg.code ?? '').toUpperCase());
       if (!room) return err('Room not found');
       // Rejoin with token
-      const existing = msg.token ? room.seats.findIndex((s) => s.token === msg.token) : -1;
-      if (existing >= 0) {
-        const s = room.seats[existing]!;
+      const si = msg.token ? room.seats.findIndex((s) => s.token === msg.token) : -1;
+      const sj = msg.token ? room.specs.findIndex((s) => s.token === msg.token) : -1;
+      if (si >= 0 || sj >= 0) {
+        const s = si >= 0 ? room.seats[si]! : room.specs[sj]!;
         if (s.ws && s.ws !== ws) s.ws.close();
         s.ws = ws;
-        conn.room = room; conn.seat = existing;
-        send(ws, { type: 'joined', code: room.code, token: s.token, seat: existing });
+        conn.room = room; conn.seat = si >= 0 ? si : undefined; conn.spec = sj >= 0 ? room.specs[sj] : undefined;
+        send(ws, { type: 'joined', code: room.code, token: s.token, seat: si });
         return broadcast(room);
       }
-      if (room.game) return err('Game already started');
-      if (room.seats.length >= E.MAX_PLAYERS) return err('Room is full');
       const token = randomBytes(12).toString('hex');
+      if (msg.spectate) {
+        if (room.specs.length >= 30) return err('Too many spectators');
+        const sp: Spec = { name: cleanName(msg.name), token, ws, cam: 0 };
+        room.specs.push(sp);
+        conn.room = room; conn.spec = sp; conn.seat = undefined;
+        send(ws, { type: 'joined', code: room.code, token, seat: -1 });
+        return broadcast(room);
+      }
+      if (room.game) return err('Game already started: you can join as a spectator');
+      if (room.seats.length >= E.MAX_PLAYERS) return err('Room is full: you can join as a spectator');
       room.seats.push({ name: cleanName(msg.name), token, ws });
-      conn.room = room; conn.seat = room.seats.length - 1;
+      conn.room = room; conn.seat = room.seats.length - 1; conn.spec = undefined;
       send(ws, { type: 'joined', code: room.code, token, seat: conn.seat });
       return broadcast(room);
     }
@@ -199,40 +226,81 @@ function handle(ws: WebSocket, msg: any) {
 
   const room = conn.room;
   const seat = conn.seat;
-  if (!room || seat === undefined) return err('Not in a room');
+  const spec = conn.spec;
+  if (!room || (seat === undefined && !spec)) return err('Not in a room');
+  const myToken = spec ? spec.token : room.seats[seat!]!.token;
+  const isHost = myToken === room.hostToken;
+  const reindex = () => {
+    room.seats.forEach((s, i) => { if (s.ws) conns.get(s.ws)!.seat = i; });
+  };
+
+  if (msg.type === 'cam') { // spectators pick whose side of the table they watch from
+    if (!spec) return err('Not a spectator');
+    spec.cam = Math.max(0, Number(msg.seat) | 0);
+    return send(ws, view(room, { spec }));
+  }
+  if (spec) {
+    const hostOnly = ['start', 'lobby', 'kick', 'addbot', 'rmbot'];
+    if (!hostOnly.includes(msg.type) && msg.type !== 'sit') return err('Spectators cannot play');
+  }
+  if (msg.type === 'sit') { // spectator -> player (lobby only)
+    if (!spec || room.game) return err('Not allowed');
+    if (room.seats.length >= E.MAX_PLAYERS) return err('Room is full');
+    room.specs.splice(room.specs.indexOf(spec), 1);
+    room.seats.push({ name: spec.name, token: spec.token, ws });
+    conn.spec = undefined; conn.seat = room.seats.length - 1;
+    return broadcast(room);
+  }
+  if (msg.type === 'spectate') { // player -> spectator (lobby only)
+    if (spec || room.game || seat === undefined) return err('Not allowed');
+    const [me] = room.seats.splice(seat, 1);
+    const sp: Spec = { name: me!.name, token: me!.token, ws, cam: 0 };
+    room.specs.push(sp);
+    conn.spec = sp; conn.seat = undefined;
+    reindex();
+    return broadcast(room);
+  }
+
 
   const apply = (r: E.Result) => {
     if (!r.ok) return err(r.error);
     const before = room.game;
     room.game = r.state;
-    broadcast(room, before ? deriveEvents(before, r.state, seat, msg) : undefined);
+    broadcast(room, before ? deriveEvents(before, r.state, seat!, msg) : undefined);
   };
 
   switch (msg.type) {
     case 'start':
-      if (seat !== 0) return err('Only the host can start');
+      if (!isHost) return err('Only the host can start');
       if (room.game && room.game.phase !== 'finished') return err('Already started');
       if (room.seats.length < E.MIN_PLAYERS) return err('Need at least 2 players');
       room.game = E.newGame(room.seats.map((s) => s.name));
       return broadcast(room, [{ t: 'deal' }]);
     case 'lobby': // back to lobby after a game
-      if (seat !== 0) return err('Only the host can do that');
+      if (!isHost) return err('Only the host can do that');
       if (room.game?.phase !== 'finished') return err('Game is still running');
       room.game = null;
       return broadcast(room);
-    case 'kick': { // host removes a seat in the lobby only
-      if (seat !== 0 || room.game) return err('Not allowed');
+    case 'kick': { // host removes a player (lobby only) or a spectator (any time)
+      if (!isHost) return err('Not allowed');
+      if (msg.spec !== undefined) {
+        const [gone] = room.specs.splice(Number(msg.spec), 1);
+        if (!gone || gone.token === room.hostToken) { if (gone) room.specs.push(gone); return err('Bad target'); }
+        send(gone.ws, { type: 'kicked' });
+        if (gone.ws) conns.set(gone.ws, {});
+        return broadcast(room);
+      }
+      if (room.game) return err('Not allowed');
       const t = Number(msg.seat);
-      if (!(t > 0 && t < room.seats.length)) return err('Bad seat');
+      if (!room.seats[t] || room.seats[t]!.token === room.hostToken) return err('Bad seat');
       const [gone] = room.seats.splice(t, 1);
       send(gone!.ws, { type: 'kicked' });
-      // fix seat indices of remaining connections
-      for (const [i, s] of room.seats.entries()) if (s.ws) conns.get(s.ws)!.seat = i;
+      reindex();
       if (gone!.ws) conns.set(gone!.ws, {});
       return broadcast(room);
     }
     case 'addbot': {
-      if (seat !== 0 || room.game) return err('Not allowed');
+      if (!isHost || room.game) return err('Not allowed');
       if (room.seats.length >= E.MAX_PLAYERS) return err('Room is full');
       const used = new Set(room.seats.map((s) => s.name));
       const name = BOT_NAMES.find((n) => !used.has(n)) ?? 'Bot' + room.seats.length;
@@ -240,34 +308,34 @@ function handle(ws: WebSocket, msg: any) {
       return broadcast(room);
     }
     case 'rmbot': { // removes the given bot, or the most recently added one
-      if (seat !== 0 || room.game) return err('Not allowed');
+      if (!isHost || room.game) return err('Not allowed');
       let t = msg.seat === undefined ? -1 : Number(msg.seat);
-      if (t < 0) for (let i = room.seats.length - 1; i > 0; i--) if (room.seats[i]!.bot) { t = i; break; }
+      if (t < 0) for (let i = room.seats.length - 1; i >= 0; i--) if (room.seats[i]!.bot) { t = i; break; }
       if (!room.seats[t]?.bot) return err('No bot to remove');
       room.seats.splice(t, 1);
-      for (const [i, s] of room.seats.entries()) if (s.ws) conns.get(s.ws)!.seat = i;
+      reindex();
       return broadcast(room);
     }
     case 'swap':
-      return apply(E.swap(room.game ?? ({} as E.State), seat, Number(msg.handId), Number(msg.upId)));
+      return apply(E.swap(room.game ?? ({} as E.State), seat!, Number(msg.handId), Number(msg.upId)));
     case 'ready':
       if (!room.game) return err('No game');
-      return apply(E.setReady(room.game, seat, msg.ready !== false));
+      return apply(E.setReady(room.game, seat!, msg.ready !== false));
     case 'play':
       if (!room.game || !Array.isArray(msg.ids)) return err('Bad request');
-      return apply(E.play(room.game, seat, msg.ids.map(Number)));
+      return apply(E.play(room.game, seat!, msg.ids.map(Number)));
     case 'pickup':
       if (!room.game) return err('No game');
-      return apply(E.pickup(room.game, seat));
+      return apply(E.pickup(room.game, seat!));
     case 'joker':
       if (!room.game) return err('No game');
-      return apply(E.jokerTarget(room.game, seat, Number(msg.target)));
+      return apply(E.jokerTarget(room.game, seat!, Number(msg.target)));
     case 'parry':
       if (!room.game) return err('No game');
-      return apply(E.parry(room.game, seat));
+      return apply(E.parry(room.game, seat!));
     case 'accept':
       if (!room.game) return err('No game');
-      return apply(E.acceptJoker(room.game, seat));
+      return apply(E.acceptJoker(room.game, seat!));
     default:
       return err('Unknown message');
   }
@@ -282,9 +350,9 @@ wss.on('connection', (ws) => {
     try { handle(ws, msg); } catch (e) { console.error(e); send(ws, { type: 'error', msg: 'Server error' }); }
   });
   ws.on('close', () => {
-    const { room, seat } = conns.get(ws) ?? {};
-    if (!room || seat === undefined) return;
-    const s = room.seats[seat];
+    const { room, seat, spec } = conns.get(ws) ?? {};
+    if (!room) return;
+    const s = spec ?? (seat === undefined ? undefined : room.seats[seat]);
     if (s && s.ws === ws) { s.ws = null; broadcast(room); }
   });
   ws.on('error', () => {});
@@ -295,7 +363,7 @@ setInterval(() => {
   for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.ping();
   const now = Date.now();
   for (const [code, r] of rooms)
-    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws)) { clearTimeout(r.botTimer); rooms.delete(code); }
+    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws) && r.specs.every((s) => !s.ws)) { clearTimeout(r.botTimer); rooms.delete(code); }
 }, 25_000);
 
 server.listen(PORT, () => console.log(`Shithead server on http://localhost:${PORT}`));

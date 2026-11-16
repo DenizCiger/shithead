@@ -56,11 +56,13 @@
       h('div', { class: 'box' },
         h('label', {}, 'YOUR NAME'),
         h('input', { id: 'nm', maxlength: 16, value: name, placeholder: 'Name', oninput: function (e) { name = e.target.value; localStorage.setItem('shithead-name', name); } }),
-        h('button', { class: 'bigbtn', onclick: function () { name.trim() ? send({ type: 'create', name: name }) : toast('Enter a name'); } }, 'CREATE ROOM')),
+        h('button', { class: 'bigbtn', onclick: function () { name.trim() ? send({ type: 'create', name: name }) : toast('Enter a name'); } }, 'CREATE ROOM'),
+        h('button', { class: 'bigbtn sec', style: 'margin-top:8px;font-size:18px', onclick: function () { name.trim() ? send({ type: 'create', name: name, spectate: true }) : toast('Enter a name'); } }, 'CREATE AS SPECTATOR')),
       h('div', { class: 'box' },
         h('label', {}, 'JOIN A ROOM'),
         h('input', { id: 'rc', maxlength: 4, value: joinCode, placeholder: 'CODE', oninput: function (e) { joinCode = e.target.value.toUpperCase(); e.target.value = joinCode; } }),
-        h('button', { class: 'bigbtn', onclick: function () { name.trim() && joinCode.length === 4 ? send({ type: 'join', code: joinCode, name: name }) : toast('Enter your name and the 4-letter code'); } }, 'JOIN')),
+        h('button', { class: 'bigbtn', onclick: function () { name.trim() && joinCode.length === 4 ? send({ type: 'join', code: joinCode, name: name }) : toast('Enter your name and the 4-letter code'); } }, 'JOIN'),
+        h('button', { class: 'bigbtn sec', style: 'margin-top:8px;font-size:18px', onclick: function () { name.trim() && joinCode.length === 4 ? send({ type: 'join', code: joinCode, name: name, spectate: true }) : toast('Enter your name and the 4-letter code'); } }, 'WATCH AS SPECTATOR')),
       !connected && h('div', { class: 'muted' }, 'Connecting…')];
   }
 
@@ -75,15 +77,23 @@
         h('div', { class: 'lab' }, 'PLAYERS (' + st.seats.length + '/6)'),
         st.seats.map(function (s) {
           return h('div', { class: 'row pl' },
-            h('span', {}, (s.seat === 0 ? '♛ ' : '') + s.name + (s.seat === st.you ? ' (you)' : '') + (s.bot ? ' 🤖' : ''), !s.connected && h('i', {}, '  offline')),
-            st.host && s.seat > 0 && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: s.bot ? 'rmbot' : 'kick', seat: s.seat }); } }, s.bot ? 'REMOVE' : 'KICK'));
+            h('span', {}, (s.seat === st.hostSeat ? '♛ ' : '') + s.name + (s.seat === st.you ? ' (you)' : '') + (s.bot ? ' 🤖' : ''), !s.connected && h('i', {}, '  offline')),
+            st.host && s.seat !== st.hostSeat && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: s.bot ? 'rmbot' : 'kick', seat: s.seat }); } }, s.bot ? 'REMOVE' : 'KICK'));
         }),
         st.host && h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' },
           h('button', { class: 'bigbtn sec', style: 'font-size:16px', disabled: st.seats.length >= 6, onclick: function () { send({ type: 'addbot' }); } }, '+ ADD BOT'),
           st.seats.some(function (s) { return s.bot; }) && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: 'rmbot' }); } }, '− REMOVE BOT')),
         st.host
           ? h('button', { class: 'bigbtn', style: 'margin-top:10px', disabled: st.seats.length < 2, onclick: function () { send({ type: 'start' }); } }, st.seats.length < 2 ? 'NEED 2+ PLAYERS' : 'START GAME')
-          : h('div', { class: 'muted' }, 'Waiting for the host to start…'))];
+          : h('div', { class: 'muted' }, 'Waiting for the host to start…')),
+      h('div', { class: 'box' },
+        h('div', { class: 'lab' }, 'SPECTATORS (' + st.specs.length + ')'),
+        st.specs.map(function (sp) {
+          return h('div', { class: 'row pl' },
+            h('span', {}, (sp.host ? '♛ ' : '') + sp.name + (sp.me ? ' (you)' : ''), !sp.connected && h('i', {}, '  offline')),
+            st.host && !sp.host && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: 'kick', spec: sp.idx }); } }, 'KICK'));
+        }),
+        h('button', { class: 'bigbtn sec', style: 'margin-top:8px;font-size:18px', onclick: function () { send({ type: st.spectator ? 'sit' : 'spectate' }); } }, st.spectator ? 'JOIN AS PLAYER' : 'SPECTATE INSTEAD'))];
   }
 
   function render() {

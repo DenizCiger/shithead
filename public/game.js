@@ -125,12 +125,16 @@ function put(sp,t,o){
 function kill(sp,fade){sprites.delete(sp.key);if(fade){sp.el.classList.add('gone');setTimeout(function(){sp.el.remove()},260)}else sp.el.remove()}
 function clearAll(){maxDeck=0;sprites.forEach(function(sp){sp.el.remove()});sprites.clear();swapSel=null;busy=false}
 function posOf(seat){if(seat===view.you)return{x:HAND.x,y:HAND.y};return OPP[oppSeats.indexOf(seat)]}
-function myTurn(){return view&&view.phase==='playing'&&view.current===view.you&&!view.pendingJoker}
+// a spectator watches from a seat's side of the table but is never that player
+function isMe(seat){return !view.spectator&&seat===view.you}
+function myTurn(){return view&&!view.spectator&&view.phase==='playing'&&view.current===view.you&&!view.pendingJoker}
 function pileT(k,c){return{x:PILE.x-k*38+(k?jit(c.id,5):0),y:PILE.y-k*9,r:k?-8-k*3+jit(c.id,4):jit(c.id,6),s:1.3-k*.08,up:true}}
 
 // loadout phase: hand on the left, reserve on the right of the same row, labelled
+function at2(e,t,x,y){e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';e.style.display='block'}
 function swapLabels(v){
   var L=[$('#lbl1'),$('#lbl2'),$('#lbl3')];L.forEach(function(e){e.style.display='none'});
+  if(v.spectator){at2(L[0],v.players[v.you].name.toUpperCase(),HAND.x,HAND.y+82);return}
   if(v.phase!=='swap'||v.players[v.you].ready)return;
   function at(e,t,x,y){e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';e.style.display='block'}
   at(L[0],'YOUR HAND',HANDX,HAND.y+82);at(L[1],'YOUR RESERVE',RESX,HAND.y+82);
@@ -151,7 +155,7 @@ function layout(o){
     if(k)sp.el.classList.add('t'+k);sp.el.classList.toggle('ghost',c.rank===3&&i>effI);sp.el.classList.toggle('eff',i===effI&&effI<n-1);
   });
   v.players.forEach(function(p){
-    var me=p.seat===v.you,k;
+    var me=p.seat===v.you&&!v.spectator,cam=p.seat===v.you&&v.spectator,k;
     if(me){
       var big=v.phase==='playing'&&v.zone!=='hand'&&v.zone!==null,act=myTurn()||v.phase==='swap',sw=v.phase==='swap';
       for(k=0;k<p.downCount;k++){
@@ -173,11 +177,11 @@ function layout(o){
         if(swapSel===c.id||rz)h.el.classList.add('sel');
       });
     }else{
-      var sl=oppSeats.indexOf(p.seat),P=OPP[sl],rp=resPos(P),bx=rp.x,by=rp.y;
-      var hn2=p.handCount,fcx=P.x,fcy=P.y+52,st=Math.min(24,190/Math.max(1,hn2-1)),ang=Math.min(5,60/Math.max(1,hn2-1)),half=(hn2-1)/2,arc=Math.min(.9,30/Math.max(1,half*half));
-      for(k=0;k<hn2;k++){var o=k-half;var hs=T('h'+p.seat+'_'+k,null,{x:fcx+o*st,y:fcy+o*o*arc,r:o*ang,s:.5,z:10+k,up:false},'opp',k);hs.el.style.setProperty('--pc',COL[p.seat%6])}
-      for(k=0;k<p.downCount;k++)T('d'+p.seat+'_'+k,null,{x:bx+k*44,y:by+6,s:.4,r:-4,z:20+k,up:false},'opp');
-      p.up.forEach(function(c,k){T('c'+c.id,c,{x:bx+k*44,y:by-4,s:.4,r:-4,z:30+k,up:true},'opp')});
+      var sl=oppSeats.indexOf(p.seat),P=cam?{x:HAND.x,y:HAND.y-20}:OPP[sl],rp=cam?{x:RES.x,y:RES.y}:resPos(P),bx=rp.x,by=rp.y,hs_=cam?.8:.5;
+      var hn2=p.handCount,fcx=P.x,fcy=P.y+(cam?0:52),st=Math.min(cam?46:24,(cam?420:190)/Math.max(1,hn2-1)),ang=Math.min(5,60/Math.max(1,hn2-1)),half=(hn2-1)/2,arc=Math.min(.9,30/Math.max(1,half*half));
+      for(k=0;k<hn2;k++){var o=k-half;var hs=T('h'+p.seat+'_'+k,null,{x:fcx+o*st,y:fcy+o*o*arc,r:o*ang,s:hs_,z:10+k,up:false},'opp',k);hs.el.style.setProperty('--pc',COL[p.seat%6])}
+      for(k=0;k<p.downCount;k++)T('d'+p.seat+'_'+k,null,{x:bx+k*(cam?54:44),y:by+6,s:cam?.5:.4,r:-4,z:20+k,up:false},'opp');
+      p.up.forEach(function(c,k){T('c'+c.id,c,{x:bx+k*(cam?54:44),y:by-4,s:cam?.5:.4,r:-4,z:30+k,up:true},'opp')});
     }
   });
   maxDeck=Math.max(maxDeck,v.deckCount);var dn=v.deckCount,dl=dn<=0?0:dn<=3?dn:3+Math.min(5,Math.max(1,Math.round(5*(dn-3)/Math.max(1,maxDeck-3))));
@@ -196,7 +200,8 @@ function buildPanels(){
     var nm=view.players[seat].name.toUpperCase();
     el.innerHTML='<div class="in"><div class="av"></div><div><div class="nm"></div></div></div><div class="st"></div>';
     el.querySelector('.av').textContent=nm[0];el.querySelector('.nm').textContent=nm;
-    el.addEventListener('click',function(){var pj=view.pendingJoker;if(pj&&!pj.parry&&pj.by===view.you)sim.send({type:'joker',target:seat})});
+    el.addEventListener('click',function(){if(view.spectator)return sim.send({type:'cam',seat:seat});var pj=view.pendingJoker;if(pj&&!pj.parry&&pj.by===view.you)sim.send({type:'joker',target:seat})});
+    if(view.spectator)el.style.cursor='pointer';
     host.appendChild(el);panels[seat]=el;
   });
 }
@@ -212,7 +217,7 @@ function setCount(n){var e=$('#count');if(n===lastCount)return;lastCount=n;e.tex
 function hud(){
   var v=view,mt=myTurn(),me=v.players[v.you];
   setCount(v.pileCount);
-  var pj=v.pendingJoker,choosing=!!(pj&&!pj.parry&&pj.by===v.you),deciding=!!(pj&&pj.parry&&pj.parry.to===v.you);
+  var pj=v.pendingJoker,choosing=!!(pj&&!v.spectator&&!pj.parry&&pj.by===v.you),deciding=!!(pj&&!v.spectator&&pj.parry&&pj.parry.to===v.you);
   $('#rule span').textContent=v.phase==='swap'?'LOADOUT: SWAP HAND AND RESERVE':pj?(pj.parry?(deciding?'PARRY IT OR EAT IT':v.players[pj.parry.to].name.toUpperCase()+' MAY PARRY...'):choosing?'PICK YOUR VICTIM':'JOKER...'):shortRule(v.restriction);
   $('#parry').style.display=deciding?'block':'none';$('#parrybtn').style.display=v.parryId!=null?'':'none';
   $('#ring').classList.toggle('ccw',v.direction===-1);
@@ -228,9 +233,10 @@ function hud(){
   var tb=$('#throwbtn');tb.style.display=(sel.length&&mt)?'block':'none';tb.firstChild.nodeValue='THROW'+(sel.length>1?' \u00d7'+sel.length:'');
   $('#take').classList.toggle('pulse',!!(mt&&v.canPickup&&v.zone!=='down'&&!(v.playable&&v.playable.length)));
   $('#take').style.display=v.phase==='swap'?'none':'';$('#take').classList.toggle('off',!v.canPickup);
-  $('#ready').style.display=v.phase==='swap'&&!me.ready?'block':'none';
-  $('#reslab').style.display=(v.phase==='playing'&&v.zone!=='hand')||v.phase==='swap'||!me.active?'none':'';
-  swapLabels(v);document.body.classList.toggle('inswap',v.phase==='swap');
+  $('#ready').style.display=!v.spectator&&v.phase==='swap'&&!me.ready?'block':'none';
+  $('#actions').style.display=v.spectator?'none':'';
+  $('#reslab').style.display=(v.phase==='playing'&&v.zone!=='hand')||v.phase==='swap'||!me.active||v.spectator?'none':'';
+  swapLabels(v);document.body.classList.toggle('inswap',v.phase==='swap'&&!v.spectator);document.body.classList.toggle('watching',!!v.spectator);
 }
 
 // ---------- input: tap = throw, hold = charge same rank, drag/flick = aim yourself
@@ -321,7 +327,7 @@ $('#ready').addEventListener('click',function(){sim.send({type:'ready'})});
 addEventListener('keydown',function(e){
   if(!view||$('#fit').style.display==='none'||$('#settings').classList.contains('open'))return;
   var pj=view.pendingJoker;
-  if(pj&&pj.parry&&pj.parry.to===view.you){if(e.key===' '||e.key==='e'){e.preventDefault();$('#eatbtn').click()}else if((e.key==='p'||e.key==='Enter')&&view.parryId!=null)$('#parrybtn').click();return}
+  if(pj&&!view.spectator&&pj.parry&&pj.parry.to===view.you){if(e.key===' '||e.key==='e'){e.preventDefault();$('#eatbtn').click()}else if((e.key==='p'||e.key==='Enter')&&view.parryId!=null)$('#parrybtn').click();return}
   if(e.key===' '){e.preventDefault();$('#take').click()}
   else if(e.key==='Enter'){if(view.phase==='swap')$('#ready').click();else doThrow()}
   else if(e.code&&e.code.indexOf('Digit')===0&&view.phase==='playing'&&myTurn()&&!busy){
@@ -368,7 +374,7 @@ var A={
   ready:async function(ev){sfx.ready()},
   begin:async function(ev){sfx.fight();await hitstop(120,true);await wait(380);stamp('FIGHT!',640,300,{size:150,dur:800,fg:'#000',bg:'#ffe600'});trauma=.7;await wait(650)},
   play:async function(ev){
-    var mine=ev.seat===view.you,n=ev.cards.length,src=posOf(ev.seat),need=false;
+    var mine=isMe(ev.seat),n=ev.cards.length,src=posOf(ev.seat),need=false;
     sprites.forEach(function(sp){if(sp.role==='pile'){var k=(sp._pk||0)+n;sp._pk=k;put(sp,{x:sp.x-38*n,y:sp.y-9*n,s:Math.max(.8,sp.s-.08*n)},{dur:90});sp.el.classList.add('t'+Math.min(5,k))}});
     for(var i=0;i<n;i++){
       var c=ev.cards[i],sp=sprites.get('c'+c.id);
@@ -392,11 +398,11 @@ var A={
     spark(PILE.x,PILE.y,46,['#fff','#ffe600','#ff2e88'],34);
     sprites.forEach(function(sp){if(sp.role==='pile'||sp.role==='fly'){put(sp,{x:BURN.x+jit(sp.card.id,80),y:BURN.y+jit(sp.card.id+3,200),r:700,s:.6},{dur:300,delay:Math.random()*120,ease:'cubic-bezier(.6,0,1,.4)'});(function(sp){setTimeout(function(){kill(sp)},430)})(sp)}});
     setCount(0);await wait(820);
-    stamp(ev.seat===view.you?'GO AGAIN!':view.players[ev.seat].name.toUpperCase()+' GOES AGAIN',640,440,{size:44,dur:800,r:-3});await wait(300);
+    stamp(isMe(ev.seat)?'GO AGAIN!':view.players[ev.seat].name.toUpperCase()+' GOES AGAIN',640,440,{size:44,dur:800,r:-3});await wait(300);
   },
   pickup:async function(ev){await eat(ev.seat,ev.count)},
   flipfail:async function(ev){
-    var mine=ev.seat===view.you,ds=sprites.get('d'+ev.seat+'_'+(mine?lastDownK:view.players[ev.seat].downCount-1)),o=ds?{x:ds.x,y:ds.y}:posOf(ev.seat);
+    var mine=isMe(ev.seat),ds=sprites.get('d'+ev.seat+'_'+(mine?lastDownK:view.players[ev.seat].downCount-1)),o=ds?{x:ds.x,y:ds.y}:posOf(ev.seat);
     if(ds)kill(ds);var sp=mk('c'+ev.card.id,ev.card,o.x,o.y,{s:mine?1:.5,z:800});sp.role='pile';
     sfx.whoosh();put(sp,{x:PILE.x+30,y:PILE.y+20,r:372,s:1.3,up:true},{dur:520,ease:'cubic-bezier(.3,0,.6,1)'});await wait(520);
     sfx.block();spark(PILE.x,PILE.y,16,['#fff','#ff2e88'],20);await hitstop(160,true);trauma=.8;
@@ -413,20 +419,20 @@ var A={
   reverse:async function(ev){sfx.four(ev.seat);var r=$('#ring');r.classList.add('snap');r.classList.toggle('ccw',ev.direction===-1);setTimeout(function(){r.classList.remove('snap')},500);stamp('REVERSE!',PILE.x+190,PILE.y-135,{size:54,dur:800,r:6,fg:'#19e3ff'});await wait(420)},
   skip:async function(ev){sfx.eight(ev.seat);stamp(ev.n>1?'SKIP x'+ev.n+'!':'SKIP!',PILE.x+190,PILE.y-135,{size:60,dur:800,r:6,fg:'#ff7a1a'});await wait(420)},
   draw:async function(ev){sfx.draw(ev&&ev.seat)},
-  out:async function(ev){var me=ev.seat===view.you,p=posOf(ev.seat);stamp(me?'YOU ARE OUT!':'OUT!',me?640:p.x,me?560:p.y,{size:me?90:60,dur:1200,fg:'#000',bg:COL[ev.seat%6]});sfx.out(me,ev.seat);spark(me?640:p.x,me?560:p.y,24,['#fff',COL[ev.seat%6]],22);await wait(600)},
-  turn:async function(ev){if(ev.seat===view.you&&!view.pendingJoker&&view.players[view.you].active){sfx.turn();stamp('YOUR HIT',640,520,{size:40,dur:600,fg:'#000',bg:'#ffe600',r:-3})}},
+  out:async function(ev){var me=isMe(ev.seat),p=posOf(ev.seat);stamp(me?'YOU ARE OUT!':'OUT!',me?640:p.x,me?560:p.y,{size:me?90:60,dur:1200,fg:'#000',bg:COL[ev.seat%6]});sfx.out(me,ev.seat);spark(me?640:p.x,me?560:p.y,24,['#fff',COL[ev.seat%6]],22);await wait(600)},
+  turn:async function(ev){if(isMe(ev.seat)&&!view.pendingJoker&&view.players[view.you].active){sfx.turn();stamp('YOUR HIT',640,520,{size:40,dur:600,fg:'#000',bg:'#ffe600',r:-3})}},
   end:async function(ev){
-    await wait(400);var v=view,lost=ev.shithead===v.you;
+    await wait(400);var v=view,lost=isMe(ev.shithead);
     if(lost)sfx.lose();else sfx.win();await hitstop(350,true);trauma=1;
     $('#over').style.setProperty('--oc',lost?'#ff2e88':'#ffe600');$('#oh').textContent=lost?'SHITHEAD':'SURVIVED';
     $('#os').textContent=lost?'LAST ONE HOLDING CARDS. THAT IS YOU.':v.players[ev.shithead].name.toUpperCase()+' IS THE SHITHEAD';
     var pl=$('#places');pl.innerHTML='';
-    v.finished.concat([ev.shithead]).forEach(function(s,i,a){var d=document.createElement('div');if(i===a.length-1)d.className='sh';d.innerHTML='<b>'+(i===a.length-1?'☠':'#'+(i+1))+'</b>'+(s===v.you?'YOU':v.players[s].name.toUpperCase());pl.appendChild(d)});
+    v.finished.concat([ev.shithead]).forEach(function(s,i,a){var d=document.createElement('div');if(i===a.length-1)d.className='sh';d.innerHTML='<b>'+(i===a.length-1?'☠':'#'+(i+1))+'</b>'+(isMe(s)?'YOU':v.players[s].name.toUpperCase());pl.appendChild(d)});
     $('#again').textContent=v.host?'REMATCH':'WAITING FOR HOST';$('#again').disabled=!v.host;$('#tolobby').style.display=v.host?'':'none';$('#over').classList.add('on');
   }
 };
 async function eat(seat,count){
-  var me=seat===view.you,p=posOf(seat),ps=[];sprites.forEach(function(sp){if(sp.role==='pile'||sp.role==='fly')ps.push(sp)});
+  var me=isMe(seat),p=posOf(seat),ps=[];sprites.forEach(function(sp){if(sp.role==='pile'||sp.role==='fly')ps.push(sp)});
   sfx.take(seat);await hitstop(90,false);trauma=Math.min(1,trauma+.6);flash(COL[seat%6],.3,300);
   stamp((me?'YOU EAT ':'EATS ')+count+'!',me?640:p.x,me?470:p.y+(p.y<100?90:-80),{fg:'#fff',bg:'#ff2e88',size:me?70:44,dur:1000});
   spawnFrom=PILE;if(me)return;
@@ -434,7 +440,7 @@ async function eat(seat,count){
   await wait(200+ps.length*25);var pe=panels[seat];if(pe){pe.classList.remove('hit');void pe.offsetWidth;pe.classList.add('hit')}spark(p.x,p.y,12,['#fff',COL[seat%6]],16);await wait(200);
 }
 sim.onState=async function(v,events){
-  if(!view){view=v;buildPanels()}else if(v.players.length!==view.players.length){view=v;buildPanels()}
+  if(!view){view=v;buildPanels()}else if(v.players.length!==view.players.length||v.spectator!==view.spectator||(v.spectator&&v.you!==view.you)){view=v;clearAll();buildPanels();layout()}
   for(var i=0;i<events.length;i++){
     var ev=events[i];
     if(ev.t==='deal'||ev.t==='setup'||ev.t==='turn'||ev.t==='end'||ev.t==='begin'||ev.t==='out'){view=v;if(ev.t==='turn'||ev.t==='begin'||ev.t==='out')layout(ev.t==='begin'?{dur:450}:undefined)}
@@ -445,7 +451,7 @@ sim.onState=async function(v,events){
 
 // ---------- parry (joker deflect) animations
 async function flyJoker(seat){
-  var me=seat===view.you,sp=null;
+  var me=isMe(seat),sp=null;
   if(me)sprites.forEach(function(q){if(!sp&&q.card&&q.card.rank===15&&q.role==='hand')sp=q});
   if(!sp){var p=posOf(seat);sp=mk('pj'+Date.now(),{id:-1,rank:15,suit:'X'},p.x,p.y,{s:me?1:.5,z:800,up:true})}
   sp.role='fly';sp.el.classList.remove('live','held','sel');sfx.whoosh(seat);
@@ -453,7 +459,7 @@ async function flyJoker(seat){
   sprites.delete(sp.key);sp.el.remove();
 }
 A.throw=async function(ev){
-  var p=posOf(ev.target),me=ev.target===view.you;sfx.whoosh(ev.target);
+  var p=posOf(ev.target),me=isMe(ev.target);sfx.whoosh(ev.target);
   stamp('INCOMING!',me?640:p.x,me?470:p.y+(p.y<100?90:-80),{size:60,dur:900,fg:'#000',bg:COL[ev.by%6],r:-5});await wait(300);
 };
 A.parry=async function(ev){
