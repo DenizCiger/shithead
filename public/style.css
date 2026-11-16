@@ -176,3 +176,6 @@ body.dragging .card:hover .lift{transform:none}
 #rules th{font-size:14px;color:#888;letter-spacing:2px;text-align:left;padding:4px 8px;border-bottom:2px solid #444}
 #rules td{padding:6px 8px;border-bottom:1px solid #2a2a30;vertical-align:top;color:#ddd}
 #rules td:first-child{color:var(--y);white-space:nowrap;font:italic 900 20px Impact,sans-serif;width:110px}
+
+/* loadout: READY sits between the hand and the reserve */
+body.inswap #ready{position:absolute;right:auto;left:610px;top:-70px;translate:-50% -50%;font-size:32px;padding:6px 30px 8px;border-width:4px;box-shadow:7px 7px 0 #000}

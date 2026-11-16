@@ -93,7 +93,7 @@ requestAnimationFrame(frame);
 var RN={11:'J',12:'Q',13:'K',14:'A'},rn=function(r){return r===15?'JOKER':RN[r]||String(r)};
 var SUITG={C:'♣',D:'♦',H:'♥',S:'♠'};
 var TAG={2:'RESET',3:'GHOST',4:'REVERSE',7:'LOW BLOW',8:'SKIP',10:'BURN',11:'JACKS'};
-var HANDX=470,RESX=810,PILE={x:640,y:300},DECK={x:885,y:300},BURN={x:1400,y:-80},HAND={x:640,y:600},RES={x:62,y:640};
+var HANDX=330,RESX=890,PILE={x:640,y:300},DECK={x:885,y:300},BURN={x:1400,y:-80},HAND={x:640,y:600},RES={x:62,y:640};
 var SLOT={
   left:{x:140,y:236,res:'below',wedge:'polygon(640px 300px,0px 20px,0px 500px)'},
   right:{x:1140,y:236,res:'below',wedge:'polygon(640px 300px,1280px 20px,1280px 500px)'},
@@ -133,7 +133,7 @@ function swapLabels(v){
   var L=[$('#lbl1'),$('#lbl2'),$('#lbl3')];L.forEach(function(e){e.style.display='none'});
   if(v.phase!=='swap'||v.players[v.you].ready)return;
   function at(e,t,x,y){e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';e.style.display='block'}
-  at(L[0],'YOUR HAND',HANDX,HAND.y+82);at(L[1],'YOUR RESERVE',RESX,HAND.y+82);at(L[2],'\u21c4',(HANDX+RESX)/2,HAND.y-84);
+  at(L[0],'YOUR HAND',HANDX,HAND.y+82);at(L[1],'YOUR RESERVE',RESX,HAND.y+82);
 }
 function layout(o){
   o=o||{};var v=view,used=new Set(),ni=0,from=o.from||spawnFrom||DECK;
@@ -230,7 +230,7 @@ function hud(){
   $('#take').style.display=v.phase==='swap'?'none':'';$('#take').classList.toggle('off',!v.canPickup);
   $('#ready').style.display=v.phase==='swap'&&!me.ready?'block':'none';
   $('#reslab').style.display=(v.phase==='playing'&&v.zone!=='hand')||v.phase==='swap'||!me.active?'none':'';
-  swapLabels(v);
+  swapLabels(v);document.body.classList.toggle('inswap',v.phase==='swap');
 }
 
 // ---------- input: tap = throw, hold = charge same rank, drag/flick = aim yourself
