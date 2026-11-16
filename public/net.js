@@ -51,15 +51,6 @@
     return el;
   }
 
-  function rules() {
-    return h('div', { class: 'box rules' },
-      h('b', {}, 'CARD RULES'), h('br'),
-      '2, 3, 10 & Joker: always playable. 3 is transparent. 10 burns the pile.', h('br'),
-      '4: reverse · 8: skip (stacks) · 7: next plays 7 or lower · J: next plays J.', h('br'),
-      'Others: equal or higher. Same-rank cards can be played together; four in a row burns. 6s may be followed by 7s.', h('br'),
-      'Joker: give the whole pile to anyone (even a player who is out). If they hold a Joker themselves they can parry it back at you, and so on.');
-  }
-
   function home() {
     return [h('h1', {}, 'SHITHEAD'),
       h('div', { class: 'box' },
@@ -70,7 +61,6 @@
         h('label', {}, 'JOIN A ROOM'),
         h('input', { id: 'rc', maxlength: 4, value: joinCode, placeholder: 'CODE', oninput: function (e) { joinCode = e.target.value.toUpperCase(); e.target.value = joinCode; } }),
         h('button', { class: 'bigbtn', onclick: function () { name.trim() && joinCode.length === 4 ? send({ type: 'join', code: joinCode, name: name }) : toast('Enter your name and the 4-letter code'); } }, 'JOIN')),
-      rules(),
       !connected && h('div', { class: 'muted' }, 'Connecting…')];
   }
 
@@ -90,8 +80,7 @@
         }),
         st.host
           ? h('button', { class: 'bigbtn', style: 'margin-top:10px', disabled: st.seats.length < 2, onclick: function () { send({ type: 'start' }); } }, st.seats.length < 2 ? 'NEED 2+ PLAYERS' : 'START GAME')
-          : h('div', { class: 'muted' }, 'Waiting for the host to start…')),
-      rules()];
+          : h('div', { class: 'muted' }, 'Waiting for the host to start…'))];
   }
 
   function render() {

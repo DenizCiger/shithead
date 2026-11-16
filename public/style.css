@@ -53,7 +53,7 @@ body.dragging .card:hover .lift{transform:none}
 .card.dead{pointer-events:none;filter:brightness(.36) saturate(.2)}
 #take.pulse{animation:tp .5s steps(2) infinite}
 @keyframes tp{50%{box-shadow:0 0 0 6px #fff,8px 8px 0 #000}}
-#throwbtn{top:520px;background:var(--y);color:#000;display:none}
+#throwbtn{background:var(--y);color:#000;display:none}
 .flip{transition:transform .2s}
 .card.down .flip{transform:rotateY(180deg)}
 .face,.back{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border:4px solid #000;box-sizing:border-box;box-shadow:6px 6px 0 rgba(0,0,0,.55);overflow:hidden}
@@ -77,9 +77,9 @@ body.dragging .card:hover .lift{transform:none}
 .btn{position:absolute;right:26px;transform:skewX(-14deg);font:inherit;font-size:28px;padding:6px 24px 8px;border:4px solid #000;box-shadow:8px 8px 0 #000;cursor:pointer;pointer-events:auto;transition:transform .06s}
 .btn:active{transform:skewX(-14deg) translate(5px,5px);box-shadow:3px 3px 0 #000}
 .btn small{display:block;font:italic 700 11px system-ui,sans-serif;opacity:.7}
-#take{top:600px;background:var(--m);color:#fff}
+#take{background:var(--m);color:#fff}
 #take.off{background:#333;color:#666;cursor:default}
-#ready{top:600px;background:var(--y);color:#000;display:none}
+#ready{background:var(--y);color:#000;display:none}
 /* impact */
 #inv{position:absolute;inset:0;background:#fff;mix-blend-mode:difference;pointer-events:none;display:none;z-index:60}
 #lines{position:absolute;left:640px;top:300px;width:0;height:0;pointer-events:none;display:none;z-index:59}
@@ -107,29 +107,12 @@ body.dragging .card:hover .lift{transform:none}
    Rules: bright colour covers under ~20% of the card; patterns are tone-on-tone (black on #1c1c22);
    the owner colour (--pc, set on opponent cards) is the only coloured thing on neutral designs and sits in the left ~30px, which is what shows in a fan. */
 .back::before{content:"";position:absolute;left:0;top:0;bottom:0;width:13px;background:var(--pc,transparent);z-index:2}
-/* stencil: the baseline */
-.back{background:#000 linear-gradient(-55deg,transparent 42%,#ff2e88 42% 58%,transparent 58%)}
-.back::after{content:"S";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:92px;color:#ffe600;-webkit-text-stroke:3px #000;transform:skewX(-12deg)}
 /* every other design starts blank and drops the inset frame unless it wants one */
-[class*="bk-"] .back{outline:none}
-[class*="bk-"] .back::after{content:"";transform:none;display:block;background:none;-webkit-mask:none;mask:none}
-/* band: stencil's band in the owner colour, white S */
-.bk-band .back{background:#000 linear-gradient(-55deg,transparent 42%,var(--pc,#fff) 42% 58%,transparent 58%)}
-.bk-band .back::after{content:"S";color:#fff;font-size:92px;-webkit-text-stroke:3px #000;transform:skewX(-12deg);display:flex;align-items:center;justify-content:center;inset:0}
-/* crop: a huge charcoal S bleeding off the card, thin bright frame */
-.bk-crop .back{background:#000;outline:2px solid var(--pc,#fff);outline-offset:-9px}
-.bk-crop .back::after{content:"S";position:absolute;inset:-34px -22px;display:flex;align-items:center;justify-content:center;font-size:250px;color:#1c1c22;-webkit-text-stroke:0;transform:skewX(-12deg)}
-/* burst: outlined comic star */
-.bk-burst .back{background:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 96 136%22 preserveAspectRatio=%22none%22%3E%3Cpolygon points=%2294.0%2C68.0 70.8%2C77.3 85.2%2C103.3 62.1%2C92.3 62.2%2C125.1 48.0%2C98.0 33.8%2C125.1 33.9%2C92.3 10.8%2C103.3 25.2%2C77.3 2.0%2C68.0 25.2%2C58.7 10.8%2C32.7 33.9%2C43.7 33.8%2C10.9 48.0%2C38.0 62.2%2C10.9 62.1%2C43.7 85.2%2C32.7 70.8%2C58.7%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%223%22 stroke-linejoin=%22miter%22/%3E%3C/svg%3E") center/92% 92% no-repeat,#0b0b0e}
-/* chevron: the ring chevrons down the spine, so a fan reads as a row of arrows */
-.bk-chevron .back{background:url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 96 136%22 preserveAspectRatio=%22none%22%3E%3Cpath d=%22M4%2C12 L16%2C22 L4%2C32%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.90%22/%3E%3Cpath d=%22M18%2C12 L30%2C22 L18%2C32%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.35%22/%3E%3Cpath d=%22M4%2C32 L16%2C42 L4%2C52%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.81%22/%3E%3Cpath d=%22M18%2C32 L30%2C42 L18%2C52%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.32%22/%3E%3Cpath d=%22M4%2C52 L16%2C62 L4%2C72%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.72%22/%3E%3Cpath d=%22M18%2C52 L30%2C62 L18%2C72%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.29%22/%3E%3Cpath d=%22M4%2C72 L16%2C82 L4%2C92%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.63%22/%3E%3Cpath d=%22M18%2C72 L30%2C82 L18%2C92%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.26%22/%3E%3Cpath d=%22M4%2C92 L16%2C102 L4%2C112%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.54%22/%3E%3Cpath d=%22M18%2C92 L30%2C102 L18%2C112%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.23%22/%3E%3Cpath d=%22M4%2C112 L16%2C122 L4%2C132%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.45%22/%3E%3Cpath d=%22M18%2C112 L30%2C122 L18%2C132%22 fill=%22none%22 stroke=%22%23fff%22 stroke-width=%224%22 opacity=%220.20%22/%3E%3C/svg%3E") 0 0/100% 100% no-repeat,#0b0b0e}
-/* split: black / charcoal diagonal with a thin accent seam */
-.bk-split .back{background:linear-gradient(120deg,#000 48.5%,var(--pc,#fff) 48.5% 51.5%,#1c1c22 51.5%)}
+.bk-dotfade .back{outline:none}
+
 /* dotfade: the table's dot grid, densest top-left, fading out toward the bottom-right corner */
 .bk-dotfade .back{background:#000}
-.bk-dotfade .back::after{position:absolute;inset:0;background:radial-gradient(#d8d8e0 1.6px,transparent 2.1px) 0 0/9px 9px;-webkit-mask:radial-gradient(circle at 0 0,#000 0,transparent 100%);mask:radial-gradient(circle at 0 0,#000 0,transparent 100%)}
-/* pinstripe: quiet tone-on-tone descendant of the old stripes, owner-colour corner */
-.bk-pinstripe .back{background:linear-gradient(135deg,var(--pc,#fff) 0 14%,transparent 14%),repeating-linear-gradient(-55deg,#000 0 7px,#1c1c22 7px 11px)}
+.bk-dotfade .back::after{content:"";position:absolute;inset:0;background:radial-gradient(#d8d8e0 1.6px,transparent 2.1px) 0 0/9px 9px;-webkit-mask:radial-gradient(circle at 0 0,#000 0,transparent 100%);mask:radial-gradient(circle at 0 0,#000 0,transparent 100%)}
 
 .panel.offline{opacity:.5}
 .panel.offline .nm::after{content:' (OFFLINE)';font-size:14px}
@@ -174,3 +157,22 @@ body.dragging .card:hover .lift{transform:none}
 #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) skewX(-10deg);z-index:400;background:var(--m);color:#fff;border:4px solid #000;box-shadow:6px 6px 0 #000;font-size:24px;padding:4px 20px 6px;opacity:0;pointer-events:none;transition:opacity .15s}
 #toast.show{opacity:1}
 #conn{position:fixed;left:0;right:0;top:0;z-index:250;background:var(--m);color:#fff;text-align:center;font-size:20px;display:none;padding:2px}
+
+/* action buttons sit in a row right under the hand */
+#actions{position:absolute;left:0;right:0;top:664px;display:flex;justify-content:center;align-items:center;gap:26px;z-index:4;pointer-events:none}
+#actions .btn{position:static;font-size:22px;padding:3px 20px 5px;border-width:3px;box-shadow:5px 5px 0 #000;pointer-events:auto}
+#actions .btn small{display:none}
+.lbl{position:absolute;display:none;font-size:20px;color:#000;background:var(--y);padding:0 14px 2px;transform:translate(-50%,-50%) skewX(-14deg);white-space:nowrap;z-index:3;pointer-events:none;border:3px solid #000;box-shadow:4px 4px 0 #000}
+.lbl.big{background:#fff;font-size:30px;padding:0 8px}
+/* rules + help */
+#help{position:fixed;right:66px;top:12px;z-index:200;width:44px;height:44px;border:3px solid #fff;background:#000;color:#fff;font:inherit;font-size:26px;line-height:1;cursor:pointer;transform:skewX(-10deg)}
+#help:hover{background:var(--y);color:#000}
+#rules{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);align-items:center;justify-content:center}
+#rules.open{display:flex}
+#rules .sbox{background:#0b0b0d;border:5px solid var(--c);box-shadow:12px 12px 0 var(--m);padding:22px 28px 26px;width:min(680px,94vw);max-height:92vh;overflow:auto}
+#rules h2{margin:0 0 10px;font-size:44px;color:var(--c);transform:skewX(-10deg)}
+#rules .rl{font:italic 600 15px/1.5 system-ui,sans-serif;color:#ccc;margin:8px 0}#rules .rl b{color:var(--y)}
+#rules table{width:100%;border-collapse:collapse;margin:10px 0;font:600 15px/1.4 system-ui,sans-serif;font-style:normal}
+#rules th{font-size:14px;color:#888;letter-spacing:2px;text-align:left;padding:4px 8px;border-bottom:2px solid #444}
+#rules td{padding:6px 8px;border-bottom:1px solid #2a2a30;vertical-align:top;color:#ddd}
+#rules td:first-child{color:var(--y);white-space:nowrap;font:italic 900 20px Impact,sans-serif;width:110px}
