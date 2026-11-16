@@ -7,8 +7,43 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app"></div>
+
+<div id="fit">
+ <div id="shake"><div id="stage">
+  <div id="dots"></div>
+  <div id="wedge"></div>
+  <div id="count">0</div>
+  <svg id="ring" viewBox="-175 -175 350 350"></svg>
+  <div id="rule"><span></span></div>
+  <div id="deckslot"></div>
+  <div id="panels"></div>
+  <div id="reslab">RESERVE</div>
+  <div class="layer" id="cards"></div>
+  <div id="xn"></div>
+  <button class="btn" id="throwbtn">THROW<small>ENTER / TAP PILE</small></button>
+  <div id="parry"><div class="pt">JOKER INCOMING!</div><div class="pb"><button class="btn" id="parrybtn">PARRY<small>P / ENTER</small></button><button class="btn" id="eatbtn">TAKE IT<small>SPACE</small></button></div></div>
+  <button class="btn" id="take">TAKE PILE<small>SPACE</small></button>
+  <button class="btn" id="ready">READY<small>ENTER</small></button>
+  <div class="layer" id="fx"></div>
+ </div></div>
+ <div id="lines"></div><div id="flash"></div><div id="inv"></div>
+ <div id="over"><div class="slab"></div><h1 id="oh"></h1><h2 id="os"></h2><div id="places"></div><button class="btn" id="again">REMATCH</button><button class="btn" id="tolobby">BACK TO LOBBY</button></div>
+</div>
+
+<div id="screen"></div>
+<button id="gear" title="Settings" aria-label="Settings">&#9881;</button>
+<div id="settings"><div class="sbox">
+  <h2>SETTINGS</h2>
+  <div class="srow"><label>EFFECTS (SHAKE, FLASHES, HIT-STOP)</label><div class="seg" data-k="fx"></div></div>
+  <div class="srow"><label>SOUND</label><div class="seg" data-k="sfx"></div></div>
+  <div class="srow"><label>VOLUME</label><input type="range" id="vol" min="0" max="100"><span id="volv"></span></div>
+  <div class="srow"><label>CARD BACK</label><div class="seg" data-k="back"></div></div>
+  <div class="srow"><button class="bigbtn" id="sclose">CLOSE</button></div>
+</div></div>
 <div id="toast"></div>
-<script src="app.js"></script>
+<div id="conn">RECONNECTING…</div>
+<script src="sfx.js"></script>
+<script src="game.js"></script>
+<script src="net.js"></script>
 </body>
 </html>

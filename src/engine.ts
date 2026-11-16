@@ -29,7 +29,11 @@ export interface State {
   current: number;
   /** seats in the order they went out (a joker can revive a finished player, removing them) */
   finished: number[];
-  pendingJoker: { by: number } | null;
+  /**
+   * A joker was played by `by` and is waiting for a target. Once a target is chosen and that player holds a joker
+   * of their own, `parry` is set: `to` may deflect the whole stack back at `from` (burning their joker) or take it.
+   */
+  pendingJoker: { by: number; parry?: { from: number; to: number } } | null;
   shithead: number | null;
   log: string[];
 }
@@ -81,9 +85,14 @@ export function shuffle<T>(arr: T[], rng: Rng): T[] {
   return a;
 }
 
-export function newGame(names: string[], rng: Rng = Math.random): State {
+/** Default deck count: one 54-card deck per two players, rounded up. */
+export function defaultDecks(players: number): number {
+  return Math.ceil(players / 2);
+}
+
+export function newGame(names: string[], rng: Rng = Math.random, decks: number = defaultDecks(names.length)): State {
   if (names.length < MIN_PLAYERS || names.length > MAX_PLAYERS) throw new Error('2-6 players required');
-  const deck = shuffle(buildDeck(names.length > 5 ? 2 : 1), rng);
+  const deck = shuffle(buildDeck(decks), rng);
   const players: Player[] = names.map((name) => ({ name, hand: [], up: [], down: [], ready: false }));
   for (const p of players) {
     for (let i = 0; i < 3; i++) p.down.push(deck.pop()!);
@@ -393,22 +402,77 @@ export function play(s: State, seat: number, ids: number[]): Result {
   return { ok: true, state: n };
 }
 
-export function jokerTarget(s: State, seat: number, target: number): Result {
-  if (s.phase !== 'playing' || !s.pendingJoker) return { ok: false, error: 'No joker pending' };
-  if (s.pendingJoker.by !== seat) return { ok: false, error: 'Not your joker' };
-  if (target === seat || !s.players[target]) return { ok: false, error: 'Pick another player' };
-  const n = clone(s);
+function hasJoker(p: Player): boolean {
+  return p.hand.some((c) => c.rank === JOKER);
+}
+
+/** The pile lands on `target`. `origin` is whoever played the joker; their turn continues afterwards. */
+function giveStack(n: State, origin: number, target: number) {
   const t = n.players[target]!;
   const wasOut = !isActive(n, target);
   t.hand.push(...n.pile);
   t.hand.sort(cmpCard);
-  addLog(n, `${n.players[seat]!.name} hands the pile (${n.pile.length} cards) to ${t.name}${wasOut ? ' — back in the game!' : '.'}`);
+  addLog(n, `${t.name} takes the joker pile (${n.pile.length} cards)${wasOut ? ' — back in the game!' : '.'}`);
   n.pile = [];
   n.pendingJoker = null;
   if (wasOut) n.finished = n.finished.filter((x) => x !== target);
-  if (checkEnd(n)) return { ok: true, state: n };
-  n.current = isActive(n, seat) ? seat : advance(n, seat, 1);
+  if (checkEnd(n)) return;
+  n.current = isActive(n, origin) ? origin : advance(n, origin, 1);
+}
+
+export function jokerTarget(s: State, seat: number, target: number): Result {
+  if (s.phase !== 'playing' || !s.pendingJoker) return { ok: false, error: 'No joker pending' };
+  if (s.pendingJoker.by !== seat || s.pendingJoker.parry) return { ok: false, error: 'Not your joker' };
+  if (target === seat || !s.players[target]) return { ok: false, error: 'Pick another player' };
+  const n = clone(s);
+  const t = n.players[target]!;
+  if (isActive(n, target) && hasJoker(t)) {
+    n.pendingJoker = { by: seat, parry: { from: seat, to: target } };
+    addLog(n, `${n.players[seat]!.name} sends the pile at ${t.name} — they hold a Joker and can parry!`);
+    return { ok: true, state: n };
+  }
+  giveStack(n, seat, target);
   return { ok: true, state: n };
+}
+
+/** The targeted player plays a joker from their hand to deflect the stack back at whoever threw it. */
+export function parry(s: State, seat: number): Result {
+  const pj = s.pendingJoker;
+  if (s.phase !== 'playing' || !pj?.parry) return { ok: false, error: 'Nothing to parry' };
+  if (pj.parry.to !== seat) return { ok: false, error: 'Not aimed at you' };
+  const n = clone(s);
+  const p = n.players[seat]!;
+  const j = p.hand.find((c) => c.rank === JOKER);
+  if (!j) return { ok: false, error: 'You have no Joker in your hand' };
+  p.hand = p.hand.filter((c) => c.id !== j.id);
+  n.burnedCount++;
+  refill(n, p);
+  const back = pj.parry.from;
+  addLog(n, `${p.name} parries with a Joker — the pile flies back at ${n.players[back]!.name}!`);
+  if (total(p) === 0) finishOut(n, seat);
+  if (checkEnd(n)) return { ok: true, state: n };
+  if (isActive(n, back) && hasJoker(n.players[back]!)) {
+    n.pendingJoker = { by: pj.by, parry: { from: seat, to: back } };
+    return { ok: true, state: n };
+  }
+  giveStack(n, pj.by, back);
+  return { ok: true, state: n };
+}
+
+/** The targeted player declines to parry and takes the pile. */
+export function acceptJoker(s: State, seat: number): Result {
+  const pj = s.pendingJoker;
+  if (s.phase !== 'playing' || !pj?.parry) return { ok: false, error: 'Nothing to accept' };
+  if (pj.parry.to !== seat) return { ok: false, error: 'Not aimed at you' };
+  const n = clone(s);
+  giveStack(n, pj.by, seat);
+  return { ok: true, state: n };
+}
+
+/** Who has to act right now (joker caster, parry decider, or the current player). */
+export function actingSeat(s: State): number {
+  const pj = s.pendingJoker;
+  return pj ? (pj.parry ? pj.parry.to : pj.by) : s.current;
 }
 
 export function canPickup(s: State, seat: number): boolean {
@@ -439,6 +503,8 @@ export type Action =
   | { t: 'play'; ids: number[] }
   | { t: 'pickup' }
   | { t: 'joker'; target: number }
+  | { t: 'parry' }
+  | { t: 'accept' }
   | { t: 'swap'; handId: number; upId: number }
   | { t: 'ready' };
 
@@ -447,6 +513,8 @@ export function applyAction(s: State, seat: number, a: Action): Result {
     case 'play': return play(s, seat, a.ids);
     case 'pickup': return pickup(s, seat);
     case 'joker': return jokerTarget(s, seat, a.target);
+    case 'parry': return parry(s, seat);
+    case 'accept': return acceptJoker(s, seat);
     case 'swap': return swap(s, seat, a.handId, a.upId);
     case 'ready': return setReady(s, seat);
   }
@@ -460,7 +528,12 @@ export function legalMoves(s: State, seat: number): Action[] {
   }
   if (s.phase !== 'playing') return out;
   if (s.pendingJoker) {
-    if (s.pendingJoker.by === seat)
+    if (s.pendingJoker.parry) {
+      if (s.pendingJoker.parry.to === seat) {
+        out.push({ t: 'accept' });
+        if (hasJoker(s.players[seat]!)) out.push({ t: 'parry' });
+      }
+    } else if (s.pendingJoker.by === seat)
       s.players.forEach((_, i) => i !== seat && out.push({ t: 'joker', target: i }));
     return out;
   }

@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as E from './engine.ts';
+import { deriveEvents, type Ev } from './events.ts';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -70,7 +71,6 @@ function view(room: Room, seat: number) {
     deckCount: g.deck.length,
     pileCount: g.pile.length,
     pile: g.pile.slice(-6).map(pubCard),
-    burned: g.burnedCount,
     restriction: E.restriction(g.pile),
     pendingJoker: g.pendingJoker,
     finished: g.finished,
@@ -89,13 +89,14 @@ function view(room: Room, seat: number) {
     zone: E.zoneOf(me),
     playable: E.playableRanks(g, seat),
     canPickup: E.canPickup(g, seat),
+    parryId: g.pendingJoker?.parry?.to === seat ? (me.hand.find((c) => c.rank === E.JOKER)?.id ?? null) : null,
     downIds: E.zoneOf(me) === 'down' && g.current === seat && g.phase === 'playing' && !g.pendingJoker ? me.down.map((c) => c.id) : [],
   };
 }
 
-function broadcast(room: Room) {
+function broadcast(room: Room, events?: Ev[]) {
   room.lastActive = Date.now();
-  room.seats.forEach((s, i) => send(s.ws, view(room, i)));
+  room.seats.forEach((s, i) => send(s.ws, events ? { ...view(room, i), events } : view(room, i)));
 }
 
 interface Conn { room?: Room; seat?: number }
@@ -146,8 +147,9 @@ function handle(ws: WebSocket, msg: any) {
 
   const apply = (r: E.Result) => {
     if (!r.ok) return err(r.error);
+    const before = room.game;
     room.game = r.state;
-    broadcast(room);
+    broadcast(room, before ? deriveEvents(before, r.state, seat, msg) : undefined);
   };
 
   switch (msg.type) {
@@ -156,7 +158,7 @@ function handle(ws: WebSocket, msg: any) {
       if (room.game && room.game.phase !== 'finished') return err('Already started');
       if (room.seats.length < E.MIN_PLAYERS) return err('Need at least 2 players');
       room.game = E.newGame(room.seats.map((s) => s.name));
-      return broadcast(room);
+      return broadcast(room, [{ t: 'deal' }]);
     case 'lobby': // back to lobby after a game
       if (seat !== 0) return err('Only the host can do that');
       if (room.game?.phase !== 'finished') return err('Game is still running');
@@ -187,6 +189,12 @@ function handle(ws: WebSocket, msg: any) {
     case 'joker':
       if (!room.game) return err('No game');
       return apply(E.jokerTarget(room.game, seat, Number(msg.target)));
+    case 'parry':
+      if (!room.game) return err('No game');
+      return apply(E.parry(room.game, seat));
+    case 'accept':
+      if (!room.game) return err('No game');
+      return apply(E.acceptJoker(room.game, seat));
     default:
       return err('Unknown message');
   }

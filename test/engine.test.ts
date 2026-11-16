@@ -85,6 +85,37 @@ test('joker revives finished player', () => {
   assert.equal(n.players[2]!.hand.length, 1); assert.deepEqual(n.finished, [0]);
   assert.equal(n.current, 1);
 });
+test('joker target without a joker takes the pile at once', () => {
+  const s = mk([[C(E.JOKER, 'X'), C(5)], [C(6)], [C(7)]], [C(9), C(10 - 1)]);
+  let n = ok(E.play(s, 0, [s.players[0]!.hand.find((c) => c.rank === E.JOKER)!.id]));
+  n = ok(E.jokerTarget(n, 0, 1));
+  assert.equal(n.pendingJoker, null); assert.equal(n.players[1]!.hand.length, 3); assert.equal(n.current, 0);
+});
+test('joker can be parried back, and ping-pongs while both sides hold jokers', () => {
+  const s = mk([[C(E.JOKER, 'X'), C(5)], [C(E.JOKER, 'X'), C(E.JOKER, 'X'), C(6)], [C(7)]], [C(9), C(12)]);
+  let n = ok(E.play(s, 0, [s.players[0]!.hand.find((c) => c.rank === E.JOKER)!.id]));
+  n = ok(E.jokerTarget(n, 0, 1));
+  assert.deepEqual(n.pendingJoker, { by: 0, parry: { from: 0, to: 1 } });
+  assert.equal(E.actingSeat(n), 1);
+  assert.ok(!E.play(n, 1, [n.players[1]!.hand[0]!.id]).ok, 'cannot play normally while a parry is pending');
+  assert.ok(!E.parry(n, 2).ok); assert.ok(!E.acceptJoker(n, 0).ok);
+  const burned = n.burnedCount;
+  n = ok(E.parry(n, 1)); // 0 has no joker left in hand -> the pile lands on them
+  assert.equal(n.pendingJoker, null); assert.equal(n.burnedCount, burned + 1);
+  assert.equal(n.players[0]!.hand.length, 3); assert.equal(n.players[1]!.hand.filter((c) => c.rank === E.JOKER).length, 1);
+  assert.equal(n.current, 0); assert.equal(n.pile.length, 0);
+});
+test('parry ping-pong: both hold two jokers', () => {
+  const J = () => C(E.JOKER, 'X');
+  const s = mk([[J(), J(), C(5)], [J(), J(), C(6)], [C(7)]], [C(9)]);
+  let n = ok(E.play(s, 0, [s.players[0]!.hand.find((c) => c.rank === E.JOKER)!.id]));
+  n = ok(E.jokerTarget(n, 0, 1)); n = ok(E.parry(n, 1));
+  assert.deepEqual(n.pendingJoker, { by: 0, parry: { from: 1, to: 0 } });
+  n = ok(E.parry(n, 0)); // back at 1, who has one joker left
+  assert.deepEqual(n.pendingJoker, { by: 0, parry: { from: 0, to: 1 } });
+  n = ok(E.acceptJoker(n, 1));
+  assert.equal(n.pendingJoker, null); assert.equal(n.players[1]!.hand.length, 1 + 1 + 1); assert.equal(n.current, 0);
+});
 test('blind flip failing picks up pile + card', () => {
   const s = mk([[], [C(4)]], [C(12)], { up: [[], [C(14)]], down: [[C(5)], [C(14)]] });
   const n = ok(E.play(s, 0, [s.players[0]!.down[0]!.id]));
@@ -103,7 +134,7 @@ test('fuzz: random playouts conserve cards and terminate', () => {
     let steps = 0;
     while (s.phase === 'playing') {
       assert.ok(++steps < 20000, `seed ${seed} did not terminate`);
-      const actor = s.pendingJoker ? s.pendingJoker.by : s.current;
+      const actor = E.actingSeat(s);
       assert.ok(s.pendingJoker || E.isActive(s, s.current), 'current must be active');
       const moves = E.legalMoves(s, actor);
       assert.ok(moves.length, `seed ${seed}: no moves`);
@@ -117,4 +148,13 @@ test('fuzz: random playouts conserve cards and terminate', () => {
     }
     assert.ok(s.shithead !== null);
   }
+});
+
+test('default deck count is ceil(players / 2)', () => {
+  assert.deepEqual([2, 3, 4, 5, 6].map(E.defaultDecks), [1, 2, 2, 3, 3]);
+  for (const n of [2, 4, 5]) {
+    const s = E.newGame(Array.from({ length: n }, (_, i) => 'P' + i), E.mulberry32(3));
+    assert.equal(E.allCards(s).length, 54 * Math.ceil(n / 2));
+  }
+  assert.equal(E.allCards(E.newGame(['a', 'b'], E.mulberry32(3), 2)).length, 108);
 });
