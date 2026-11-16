@@ -75,9 +75,12 @@
         h('div', { class: 'lab' }, 'PLAYERS (' + st.seats.length + '/6)'),
         st.seats.map(function (s) {
           return h('div', { class: 'row pl' },
-            h('span', {}, (s.seat === 0 ? '♛ ' : '') + s.name + (s.seat === st.you ? ' (you)' : ''), !s.connected && h('i', {}, '  offline')),
-            st.host && s.seat > 0 && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: 'kick', seat: s.seat }); } }, 'KICK'));
+            h('span', {}, (s.seat === 0 ? '♛ ' : '') + s.name + (s.seat === st.you ? ' (you)' : '') + (s.bot ? ' 🤖' : ''), !s.connected && h('i', {}, '  offline')),
+            st.host && s.seat > 0 && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: s.bot ? 'rmbot' : 'kick', seat: s.seat }); } }, s.bot ? 'REMOVE' : 'KICK'));
         }),
+        st.host && h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' },
+          h('button', { class: 'bigbtn sec', style: 'font-size:16px', disabled: st.seats.length >= 6, onclick: function () { send({ type: 'addbot' }); } }, '+ ADD BOT'),
+          st.seats.some(function (s) { return s.bot; }) && h('button', { class: 'bigbtn sec', style: 'font-size:16px', onclick: function () { send({ type: 'rmbot' }); } }, '− REMOVE BOT')),
         st.host
           ? h('button', { class: 'bigbtn', style: 'margin-top:10px', disabled: st.seats.length < 2, onclick: function () { send({ type: 'start' }); } }, st.seats.length < 2 ? 'NEED 2+ PLAYERS' : 'START GAME')
           : h('div', { class: 'muted' }, 'Waiting for the host to start…'))];

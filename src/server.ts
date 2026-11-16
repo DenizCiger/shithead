@@ -14,12 +14,13 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
-interface Seat { name: string; token: string; ws: WebSocket | null }
+interface Seat { name: string; token: string; ws: WebSocket | null; bot?: boolean }
 interface Room {
   code: string;
   seats: Seat[]; // seat index == engine seat
   game: E.State | null;
   lastActive: number;
+  botTimer?: NodeJS.Timeout;
 }
 const rooms = new Map<string, Room>();
 
@@ -59,7 +60,7 @@ function view(room: Room, seat: number) {
     code: room.code,
     you: seat,
     host: seat === 0,
-    seats: room.seats.map((s, i) => ({ seat: i, name: s.name, connected: !!s.ws })),
+    seats: room.seats.map((s, i) => ({ seat: i, name: s.name, connected: !!s.ws || !!s.bot, bot: !!s.bot })),
   };
   if (!g) return { ...base, phase: 'lobby' };
   const me = g.players[seat]!;
@@ -97,6 +98,61 @@ function view(room: Room, seat: number) {
 function broadcast(room: Room, events?: Ev[]) {
   room.lastActive = Date.now();
   room.seats.forEach((s, i) => send(s.ws, events ? { ...view(room, i), events } : view(room, i)));
+  scheduleBots(room);
+}
+
+// ---------------------------------------------------------------- bots
+
+const BOT_NAMES = ['Botty', 'Clanker', 'Sparky', 'Gizmo', 'Rusty', 'Widget', 'Bolt', 'Cogsworth'];
+const BOT_DELAY = Number(process.env.BOT_DELAY ?? 1100);
+
+/** Lowest-value choice first; specials (2, 3, 10, joker) are kept back unless nothing else works. */
+function botPick(g: E.State, seat: number, moves: E.Action[]): E.Action {
+  const rnd = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]!;
+  if (g.phase === 'swap') return moves[0]!;
+  const byId = new Map(E.allCards(g).map((c) => [c.id, c]));
+  const plays = moves.filter((m): m is Extract<E.Action, { t: 'play' }> => m.t === 'play');
+  const p = g.players[seat]!;
+  if (E.zoneOf(p) === 'down') return rnd(plays);
+  if (!plays.length) return moves.find((m) => m.t === 'pickup') ?? moves[0]!;
+  if (Math.random() < 0.08) return rnd(plays); // a little noise so two bots can never cycle forever
+  const cost = (m: Extract<E.Action, { t: 'play' }>) => {
+    const ranks = m.ids.map((id) => byId.get(id)!.rank);
+    const special = ranks.some((r) => r === 2 || r === 3 || r === 10 || r === E.JOKER);
+    return (special ? 100 : 0) + Math.max(...ranks) - m.ids.length * 0.1;
+  };
+  return plays.reduce((a, b) => (cost(b) < cost(a) ? b : a));
+}
+
+function botMsg(a: E.Action): { type: string; [k: string]: unknown } {
+  return a.t === 'play' ? { type: 'play', ids: a.ids } : a.t === 'joker' ? { type: 'joker', target: a.target } : { type: a.t };
+}
+
+function scheduleBots(room: Room) {
+  if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = undefined; }
+  const g = room.game;
+  if (!g || g.phase === 'finished' || !room.seats.some((s) => s.bot)) return;
+  if (!room.seats.some((s) => s.ws)) return; // nobody watching: do not burn CPU
+  const acting = g.phase === 'swap'
+    ? room.seats.findIndex((s, i) => s.bot && !g.players[i]!.ready)
+    : (() => { const a = E.actingSeat(g); return room.seats[a]?.bot ? a : -1; })();
+  if (acting < 0) return;
+  room.botTimer = setTimeout(() => {
+    room.botTimer = undefined;
+    const cur = room.game;
+    if (!cur || cur !== g) return scheduleBots(room);
+    const moves = E.legalMoves(cur, acting);
+    if (!moves.length) return;
+    let a = botPick(cur, acting, moves);
+    if (cur.pendingJoker && !cur.pendingJoker.parry) { // joker target: any live opponent
+      const t = moves.filter((m) => m.t === 'joker');
+      a = t[Math.floor(Math.random() * t.length)]!;
+    } else if (cur.pendingJoker?.parry) a = moves.find((m) => m.t === 'parry') ?? moves[0]!;
+    const r = E.applyAction(cur, acting, a);
+    if (!r.ok) { console.error('bot move rejected', r.error); return; }
+    room.game = r.state;
+    broadcast(room, deriveEvents(cur, r.state, acting, botMsg(a)));
+  }, g.phase === 'swap' ? Math.min(600, BOT_DELAY) : BOT_DELAY);
 }
 
 interface Conn { room?: Room; seat?: number }
@@ -175,6 +231,23 @@ function handle(ws: WebSocket, msg: any) {
       if (gone!.ws) conns.set(gone!.ws, {});
       return broadcast(room);
     }
+    case 'addbot': {
+      if (seat !== 0 || room.game) return err('Not allowed');
+      if (room.seats.length >= E.MAX_PLAYERS) return err('Room is full');
+      const used = new Set(room.seats.map((s) => s.name));
+      const name = BOT_NAMES.find((n) => !used.has(n)) ?? 'Bot' + room.seats.length;
+      room.seats.push({ name, token: randomBytes(12).toString('hex'), ws: null, bot: true });
+      return broadcast(room);
+    }
+    case 'rmbot': { // removes the given bot, or the most recently added one
+      if (seat !== 0 || room.game) return err('Not allowed');
+      let t = msg.seat === undefined ? -1 : Number(msg.seat);
+      if (t < 0) for (let i = room.seats.length - 1; i > 0; i--) if (room.seats[i]!.bot) { t = i; break; }
+      if (!room.seats[t]?.bot) return err('No bot to remove');
+      room.seats.splice(t, 1);
+      for (const [i, s] of room.seats.entries()) if (s.ws) conns.get(s.ws)!.seat = i;
+      return broadcast(room);
+    }
     case 'swap':
       return apply(E.swap(room.game ?? ({} as E.State), seat, Number(msg.handId), Number(msg.upId)));
     case 'ready':
@@ -222,7 +295,7 @@ setInterval(() => {
   for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.ping();
   const now = Date.now();
   for (const [code, r] of rooms)
-    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws)) rooms.delete(code);
+    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws)) { clearTimeout(r.botTimer); rooms.delete(code); }
 }, 25_000);
 
 server.listen(PORT, () => console.log(`Shithead server on http://localhost:${PORT}`));
