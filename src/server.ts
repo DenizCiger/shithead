@@ -24,6 +24,7 @@ interface Room {
   game: E.State | null;
   lastActive: number;
   botTimer?: NodeJS.Timeout;
+  speed: number; // host-set game speed multiplier; shortens the bots' thinking time
 }
 const rooms = new Map<string, Room>();
 
@@ -166,7 +167,7 @@ function scheduleBots(room: Room) {
     if (!r.ok) { console.error('bot move rejected', r.error); return; }
     room.game = r.state;
     broadcast(room, deriveEvents(cur, r.state, acting, botMsg(a)));
-  }, g.phase === 'swap' ? Math.min(600, BOT_DELAY) : BOT_DELAY);
+  }, (g.phase === 'swap' ? Math.min(600, BOT_DELAY) : BOT_DELAY) / room.speed);
 }
 
 interface Conn { room?: Room; seat?: number; spec?: Spec }
@@ -182,7 +183,7 @@ function handle(ws: WebSocket, msg: any) {
     case 'create': {
       const code = genCode();
       const token = randomBytes(12).toString('hex');
-      const room: Room = { code, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
+      const room: Room = { code, speed: 1, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
       if (msg.spectate) {
         const sp: Spec = { name: cleanName(msg.name), token, ws, cam: 0 };
         room.specs.push(sp); conn.spec = sp;
@@ -234,6 +235,11 @@ function handle(ws: WebSocket, msg: any) {
     room.seats.forEach((s, i) => { if (s.ws) conns.get(s.ws)!.seat = i; });
   };
 
+  if (msg.type === 'speed') { // host only: how fast bots play (clients scale their own animations)
+    if (!isHost) return;
+    room.speed = [1, 2, 4, 8].includes(Number(msg.v)) ? Number(msg.v) : 1;
+    return scheduleBots(room);
+  }
   if (msg.type === 'cam') { // spectators pick whose side of the table they watch from
     if (!spec) return err('Not a spectator');
     spec.cam = Math.max(0, Number(msg.seat) | 0);
