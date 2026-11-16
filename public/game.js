@@ -162,7 +162,7 @@ function layout(o){
         var rz=sel.indexOf(c.id)>=0&&big;
         var u=T('c'+c.id,c,sw?{x:RESX+(k-(p.up.length-1)/2)*118,y:HAND.y-6,s:1,r:-4,z:160+k,up:true}:big?{x:HAND.x+(k-(p.up.length-1)/2)*118,y:HAND.y-(rz?38:0),s:1,r:-4,z:160+k,up:true}:{x:RES.x+k*54,y:RES.y-8,s:.5,r:-4,z:160+k,up:true},'up',k);
         if(v.zone==='up'||v.phase==='swap'){if(mineTurn&&v.zone==='up'&&pl.indexOf(c.rank)<0)u.el.classList.add('dead');else u.el.classList.add('live')}
-        if(rz)u.el.classList.add('sel');
+        if(rz||(sw&&swapSel===c.id))u.el.classList.add('sel');
       });
       var hn=v.hand.length,mid=(hn-1)/2,gap=Math.min(98,720/Math.max(1,hn-1));
       v.hand.forEach(function(c,i){
@@ -269,8 +269,8 @@ stage.addEventListener('pointerdown',function(e){
   var c=sp.card;if(!okRank(c))return;
   var was=sel.indexOf(c.id)>=0;
   var tnow=performance.now(),dbl=lastTap.id===c.id&&tnow-lastTap.t<320;
-  if(dbl){raiseRank(c);sfx.charge(2);lastTap={id:0,t:0}} // second press of a double-tap: grab the whole rank right away, so a drag carries it
-  else if(!was){raise(c);sfx.charge(Math.max(0,sel.length-1))}
+  if(dbl){raiseRank(c);sfx.raise(2);lastTap={id:0,t:0}} // second press of a double-tap: grab the whole rank right away, so a drag carries it
+  else if(!was){raise(c);sfx.raise(Math.max(0,sel.length-1))}
   hold={sp:sp,was:was,dbl:dbl,sx:p.x,sy:p.y,moved:false,hist:[{y:p.y,t:performance.now()}]};
   layout({dur:110});try{stage.setPointerCapture(e.pointerId)}catch(_){}
 });
@@ -285,16 +285,21 @@ stage.addEventListener('pointermove',function(e){
   hold.hist.push({y:p.y,t:now});while(hold.hist.length>2&&now-hold.hist[0].t>120)hold.hist.shift();
   stackTo(p.x,p.y-30,hold.first?90:0);hold.first=false;
 });
+function pairSwap(a,b){var hand=a.role==='hand'?a:b,up=a.role==='up'?a:b;sim.send({type:'swap',handId:hand.card.id,upId:up.card.id})}
 function endHold(){document.body.classList.remove('dragging');xn.style.display='none'}
 stage.addEventListener('pointercancel',function(){if(!hold)return;var h=hold;hold=null;endHold();if(h.sp.el)h.sp.el.classList.remove('held');layout()});
 addEventListener('keydown',function(e){if(e.key==='Escape'){if($('#rules').classList.contains('open')){$('#rules').classList.remove('open');return}if($('#settings').classList.contains('open')){closeSettings();return}if(hold){var h=hold;hold=null;endHold();h.sp.el.classList.remove('held');layout()}else if(sel.length){sel=[];layout()}}});
 stage.addEventListener('pointerup',function(e){
   if(!hold)return;var h=hold,p=pt(e);hold=null;endHold();
-  if(h.swap){
-    if(h.moved&&h.sp.role==='hand'){var best=null;sprites.forEach(function(s){if(s.role==='up'&&Math.hypot(s.x-p.x,s.y-p.y)<60)best=s});if(best){swapSel=null;return sim.send({type:'swap',handId:h.sp.card.id,upId:best.card.id})}return layout()}
-    if(h.sp.role==='hand'){swapSel=swapSel===h.sp.card.id?null:h.sp.card.id;sfx.charge(0);return layout()}
-    if(swapSel==null){nope(h.sp,'PICK A HAND CARD FIRST');return}
-    var hid=swapSel;swapSel=null;return sim.send({type:'swap',handId:hid,upId:h.sp.card.id});
+  if(h.swap){ // a hand card and a reserve card trade places; either one can be picked first, by tap or by drag onto the other
+    var me=h.sp,other=me.role==='hand'?'up':'hand';
+    if(h.moved){
+      var best=null,bd=70;sprites.forEach(function(q){if(q.role===other){var d=Math.hypot(q.x-p.x,q.y-p.y);if(d<bd){bd=d;best=q}}});
+      swapSel=null;if(best)return pairSwap(me,best);return layout(); // dropped on nothing: snap back
+    }
+    var first=swapSel!=null&&swapSel!==me.card.id?sprites.get('c'+swapSel):null;
+    if(first&&first.role===other){swapSel=null;return pairSwap(first,me)}
+    swapSel=swapSel===me.card.id?null:me.card.id;sfx.raise(0);return layout();
   }
   h.sp.el.classList.remove('held');
   var c=h.sp.card;
@@ -324,7 +329,7 @@ addEventListener('keydown',function(e){
     if(view.zone==='down'){if(view.downIds[i]!==undefined){lastDownK=i;busy=true;sim.send({type:'play',ids:[view.downIds[i]]})}return}
     var c=zoneCards()[i];if(!c||!okRank(c))return;
     if(e.shiftKey)raiseRank(c);else if(sel.indexOf(c.id)>=0)lower(c);else raise(c);
-    sfx.charge(Math.max(0,sel.length-1));layout({dur:110});
+    sfx.raise(Math.max(0,sel.length-1));layout({dur:110});
   }
 });
 
