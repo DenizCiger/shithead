@@ -38,6 +38,15 @@ test('events: joker thrown at a joker holder, parried, then taken', () => {
 });
 
 
+test('events: an expert misplay carries the shot flag', () => {
+  const s0 = mk([[C(5), C(9)], [C(4)]], [C(12)]);
+  s0.rules = E.normalizeRules({ difficulty: 'expert', shot: true });
+  const play = { type: 'play', ids: [s0.players[0]!.hand[0]!.id] };
+  const evs = deriveEvents(s0, ok(E.play(s0, 0, play.ids)), 0, play);
+  assert.deepEqual(evs[0], { t: 'pickup', seat: 0, count: 1, penalty: true, shot: true });
+});
+
+
 test('events: accept gives the pile to the decider', () => {
   const s0 = mk([[J(), C(5)], [J(), C(6)], [C(7)]], [C(9), C(10 - 1)]);
   let s = ok(E.play(s0, 0, [s0.players[0]!.hand[0]!.id]));

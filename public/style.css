@@ -181,6 +181,25 @@ body.inroom #chat{display:flex}
 #chatlog{display:none;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;height:min(260px,40vh);margin-bottom:4px;background:rgba(0,0,0,.3);color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:auto;scrollbar-width:thin;scrollbar-color:#666 transparent}
 #chat.open #chatlog{display:flex;flex-direction:column}
 #chatlog>.cm:first-child{margin-top:auto} /* anchor to the bottom like Minecraft; older lines scroll up */
+
+/* fake shot on an expert misplay */
+.shot{position:absolute;left:0;top:0;z-index:72;pointer-events:none}
+.shot .glass{position:relative;width:60px;height:78px;margin:-39px 0 0 -30px;background:#fff;clip-path:polygon(0 0,100% 0,84% 100%,16% 100%);animation:shot var(--d,1400ms) forwards}
+.shot .glass::before{content:'';position:absolute;inset:0 6px 7px;background:#1a1a1a;clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.shot .glass i{position:absolute;left:6px;right:6px;bottom:7px;height:82%;background:linear-gradient(#ffd24a,#ff8a00);clip-path:polygon(0 0,100% 0,84% 100%,16% 100%);animation:drain var(--d,1400ms) forwards}
+@keyframes shot{0%{transform:scale(0) rotate(-25deg)}14%{transform:scale(1.2) rotate(6deg)}24%{transform:scale(1) rotate(0)}42%{transform:translateY(-14px) rotate(0)}68%{transform:translateY(-40px) rotate(-115deg)}86%{transform:translateY(-40px) rotate(-115deg);opacity:1}100%{transform:translateY(-10px) rotate(-20deg) scale(.6);opacity:0}}
+@keyframes drain{0%,42%{height:82%}68%,100%{height:0}}
+/* drunk after the shot, a bit like nausea: the table stretches wide and tall, leans, blurs, and the edges glow purple-green.
+   Only transforms, blur and opacity, which stay cheap. Reduced effects tone it down, minimal keeps only the edges. */
+#stage.wonky{filter:blur(1.2px) saturate(1.4);animation:nausea 4.2s ease-in-out infinite}
+body.fx1 #stage.wonky{filter:blur(.7px) saturate(1.2);animation-name:nausea-lite}
+body.fx0 #stage.wonky{filter:none;animation:none}
+#booze{position:absolute;inset:0;z-index:6;pointer-events:none;opacity:0;transition:opacity .8s;background:radial-gradient(ellipse at center,transparent 30%,rgba(120,20,170,.35) 68%,rgba(30,120,20,.55))}
+#booze.on{opacity:1;animation:vig 3.1s ease-in-out infinite alternate}
+@keyframes nausea{0%,100%{transform:none}25%{transform:scale(1.045,.98) skewX(1.5deg)}50%{transform:scale(1.015,1.015) rotate(.6deg)}75%{transform:scale(.98,1.045) skewX(-1.5deg)}}
+@keyframes nausea-lite{0%,100%{transform:none}25%{transform:scale(1.02,.99) skewX(.6deg)}75%{transform:scale(.99,1.02) skewX(-.6deg)}}
+@keyframes vig{from{opacity:.6;filter:hue-rotate(0deg)}to{opacity:1;filter:hue-rotate(80deg)}}
+
 #deckn{position:absolute;left:885px;top:222px;width:80px;margin-left:-40px;text-align:center;font-size:34px;line-height:1;color:#fff;-webkit-text-stroke:2px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #000;z-index:2;pointer-events:none}
 #chatlog .cm:hover{background:rgba(40,40,46,.8)}
 #chatlog b,#chatfeed b{font-weight:800}

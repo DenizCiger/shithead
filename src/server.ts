@@ -537,7 +537,7 @@ function handle(ws: WebSocket, msg: any) {
       if (!(d >= 0 && d <= 4)) return err('Bad deck count');
       st.decks = d;
     }
-    if (p.preset === 'classic' || p.preset === 'ahif') st.rules = { ...(p.preset === 'classic' ? E.CLASSIC : E.AHIF), difficulty: st.rules.difficulty };
+    if (p.preset === 'classic' || p.preset === 'ahif') st.rules = { ...(p.preset === 'classic' ? E.CLASSIC : E.AHIF), difficulty: st.rules.difficulty, shot: st.rules.shot };
     if (p.rules && typeof p.rules === 'object') st.rules = E.normalizeRules({ ...st.rules, ...p.rules });
     if (p.assist && typeof p.assist === 'object')
       for (const k of ['autoTake', 'autoOne', 'autoStack'] as const) if (typeof p.assist[k] === 'boolean') st.assist[k] = p.assist[k];

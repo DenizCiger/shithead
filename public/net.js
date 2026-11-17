@@ -149,6 +149,9 @@
         return h('button', { class: x.v === R.difficulty ? 'on' : '', disabled: !host, onclick: function () { patch({ rules: { difficulty: x.v } }); } }, x.l);
       })),
       h('div', { class: 'sys dd' }, d.desc),
+      R.difficulty === 'expert' && h('div', { class: 'stick' },
+        h('button', { class: R.shot ? '' : 'off', disabled: !host, title: U.SHOT.desc, 'aria-pressed': R.shot ? 'true' : 'false',
+          onclick: function () { patch({ rules: { shot: !R.shot } }); } }, U.SHOT.short)),
       h('span', { class: 'lab' }, 'ASSISTS (EVERYONE)'),
       h('div', { class: 'stick as' }, U.ASSIST.map(function (x) {
         return h('button', { class: S.assist[x.k] ? '' : 'off', disabled: !host, title: x.desc, 'aria-pressed': S.assist[x.k] ? 'true' : 'false',

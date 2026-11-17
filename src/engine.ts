@@ -36,16 +36,18 @@ export interface Rules {
   randomJoker: boolean; // the joker's target is drawn at random instead of chosen
   /** assisted: unplayable cards dimmed; normal: not dimmed, blocked; expert: playing an illegal card takes the pile */
   difficulty: Difficulty;
+  shot: boolean; // expert only: a punished misplay also costs a (fake) shot
 }
-export const AHIF: Rules = { jokers: true, parry: true, r3: true, r4: true, r8: true, r10: true, four: true, combo: true, randomJoker: false, difficulty: 'assisted' };
-export const CLASSIC: Rules = { jokers: true, parry: false, r3: false, r4: false, r8: false, r10: true, four: true, combo: false, randomJoker: false, difficulty: 'assisted' };
+export const AHIF: Rules = { jokers: true, parry: true, r3: true, r4: true, r8: true, r10: true, four: true, combo: true, randomJoker: false, difficulty: 'assisted', shot: false };
+export const CLASSIC: Rules = { jokers: true, parry: false, r3: false, r4: false, r8: false, r10: true, four: true, combo: false, randomJoker: false, difficulty: 'assisted', shot: false };
 /** Keys of the boolean rules, in display order. */
-export const RULE_KEYS = ['jokers', 'parry', 'r3', 'r4', 'r8', 'r10', 'four', 'combo', 'randomJoker'] as const;
+export const RULE_KEYS = ['jokers', 'parry', 'r3', 'r4', 'r8', 'r10', 'four', 'combo', 'randomJoker', 'shot'] as const;
 export function normalizeRules(r: Partial<Rules> | undefined): Rules {
   const o: Rules = { ...AHIF };
   for (const k of RULE_KEYS) if (typeof r?.[k] === 'boolean') o[k] = r[k]!;
   if (r?.difficulty === 'assisted' || r?.difficulty === 'normal' || r?.difficulty === 'expert') o.difficulty = r.difficulty;
   if (!o.jokers) { o.parry = false; o.randomJoker = false; }
+  if (o.difficulty !== 'expert') { o.shot = false; }
   return o;
 }
 
