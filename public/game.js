@@ -56,7 +56,7 @@ function buildSettings(){
   });
   $('#vol').addEventListener('input',function(){S.vol=this.value/100;if(E)E.setVolume(S.vol);saveSettings();syncSettings()});
   $('#vol').addEventListener('change',function(){initAudio();snd('hit',2)});
-  $('#help').addEventListener('click',function(){$('#rules').classList.add('open')});
+  $('#help').addEventListener('click',function(){RulesUI.open(view?view.rules:(window.Net&&Net.rules?Net.rules():null))});
   $('#rules').addEventListener('click',function(e){if(e.target===$('#rules')||e.target.id==='rclose')$('#rules').classList.remove('open')});
   $('#gear').addEventListener('click',function(){$('#settings').classList.contains('open')?closeSettings():openSettings()});
   applyFx();syncSettings();
@@ -93,7 +93,10 @@ requestAnimationFrame(frame);
 // ---------- cards
 var RN={11:'J',12:'Q',13:'K',14:'A'},rn=function(r){return r===15?'JOKER':RN[r]||String(r)};
 var SUITG={C:'♣',D:'♦',H:'♥',S:'♠'};
-var TAG={2:'RESET',3:'GHOST',4:'REVERSE',7:'LOW BLOW',8:'SKIP',10:'BURN',11:'JACKS'};
+var TAG0={2:'RESET',3:'GHOST',4:'REVERSE',7:'LOW BLOW',8:'SKIP',10:'BURN',11:'JACKS'},TAGK={3:'r3',4:'r4',8:'r8',10:'r10'};
+// card captions follow the room's rules: a 3 is only a "ghost" when 3s are transparent, and so on
+var R=function(){return(view&&view.rules)||{r3:true,r4:true,r8:true,r10:true,four:true,combo:true,jokers:true,parry:true,randomJoker:false,difficulty:'assisted'}};
+var TAG=function(r){return(!TAGK[r]||R()[TAGK[r]])?TAG0[r]:undefined};
 var HANDX=330,RESX=890,PILE={x:640,y:300},DECK={x:885,y:300},BURN={x:1400,y:-80},HAND={x:640,y:600},RES={x:62,y:640};
 var SLOT={
   left:{x:140,y:236,res:'below',wedge:'polygon(640px 300px,0px 20px,0px 500px)'},
@@ -109,7 +112,7 @@ function faceEl(c){
   var f=document.createElement('div');f.className='face';
   if(c.rank===15){f.classList.add('jk');f.innerHTML='<div>JOKER</div>';return f}
   if(c.suit==='H'||c.suit==='D')f.classList.add('red');
-  f.innerHTML='<div class="r">'+rn(c.rank)+'</div><div class="s">'+SUITG[c.suit]+'</div>'+(TAG[c.rank]?'<div class="tg">'+TAG[c.rank]+'</div>':'');return f;
+  f.innerHTML='<div class="r">'+rn(c.rank)+'</div><div class="s">'+SUITG[c.suit]+'</div>'+(TAG(c.rank)?'<div class="tg">'+TAG(c.rank)+'</div>':'');return f;
 }
 function mk(key,card,x,y,o){
   o=o||{};var el=document.createElement('div');el.className='card';el.innerHTML='<div class="lift"><div class="flip"><div class="back"></div></div></div>';
@@ -128,6 +131,8 @@ function clearAll(){maxDeck=0;sprites.forEach(function(sp){sp.el.remove()});spri
 function posOf(seat){if(seat===view.you)return{x:HAND.x,y:HAND.y};return OPP[oppSeats.indexOf(seat)]}
 // a spectator watches from a seat's side of the table but is never that player
 function isMe(seat){return !view.spectator&&seat===view.you}
+// only the Assisted difficulty greys out and locks cards that cannot be played; Normal blocks the throw, Expert punishes it
+function dims(){return R().difficulty==='assisted'}
 function myTurn(){return view&&!view.spectator&&view.phase==='playing'&&view.current===view.you&&!view.pendingJoker}
 function pileT(k,c){return{x:PILE.x-k*38+(k?jit(c.id,5):0),y:PILE.y-k*9,r:k?-8-k*3+jit(c.id,4):jit(c.id,6),s:1.3-k*.08,up:true}}
 
@@ -150,10 +155,10 @@ function layout(o){
   }
   var mineTurn=myTurn()&&v.phase==='playing',pl=v.playable||[];
   sel=sel.filter(function(id){return mineTurn&&zoneCards().some(function(c){return c.id===id})});
-  var n=v.pile.length,effI=-1;for(var i=n-1;i>=0;i--)if(v.pile[i].rank!==3){effI=i;break}
+  var n=v.pile.length,effI=-1;for(var i=n-1;i>=0;i--)if(!(R().r3&&v.pile[i].rank===3)){effI=i;break}
   v.pile.forEach(function(c,i){
     var k=n-1-i,t=pileT(k,c);t.z=100+i;var sp=T('c'+c.id,c,t,'pile');
-    if(k)sp.el.classList.add('t'+k);sp.el.classList.toggle('ghost',c.rank===3&&i>effI);sp.el.classList.toggle('eff',i===effI&&effI<n-1);
+    if(k)sp.el.classList.add('t'+k);sp.el.classList.toggle('ghost',R().r3&&c.rank===3&&i>effI);sp.el.classList.toggle('eff',i===effI&&effI<n-1);
   });
   v.players.forEach(function(p){
     var me=p.seat===v.you&&!v.spectator,cam=p.seat===v.you&&v.spectator,k;
@@ -166,7 +171,7 @@ function layout(o){
       p.up.forEach(function(c,k){
         var rz=sel.indexOf(c.id)>=0&&big;
         var u=T('c'+c.id,c,sw?{x:RESX+(k-(p.up.length-1)/2)*118,y:HAND.y-6,s:1,r:-4,z:160+k,up:true}:big?{x:HAND.x+(k-(p.up.length-1)/2)*118,y:HAND.y-(rz?38:0),s:1,r:-4,z:160+k,up:true}:{x:RES.x+k*54,y:RES.y-8,s:.5,r:-4,z:160+k,up:true},'up',k);
-        if(v.zone==='up'||v.phase==='swap'){if(mineTurn&&v.zone==='up'&&pl.indexOf(c.rank)<0)u.el.classList.add('dead');else u.el.classList.add('live')}
+        if(v.zone==='up'||v.phase==='swap'){if(dims()&&mineTurn&&v.zone==='up'&&pl.indexOf(c.rank)<0)u.el.classList.add('dead');else u.el.classList.add('live')}
         if(rz||(sw&&swapSel===c.id))u.el.classList.add('sel');
       });
       var hn=v.hand.length,mid=(hn-1)/2,gap=Math.min(98,720/Math.max(1,hn-1));
@@ -174,7 +179,7 @@ function layout(o){
         var rz=sel.indexOf(c.id)>=0;
         var hx=sw?HANDX+(i-mid)*Math.min(98,300/Math.max(1,hn-1)):HAND.x+(i-mid)*gap;
         var h=T('c'+c.id,c,{x:hx,y:HAND.y+(act?-10:6)-(rz?38:0),r:-4,s:1,z:200+i,up:true},'hand',i);
-        if(mineTurn&&v.zone==='hand'&&pl.indexOf(c.rank)<0)h.el.classList.add('dead');else h.el.classList.add('live');
+        if(dims()&&mineTurn&&v.zone==='hand'&&pl.indexOf(c.rank)<0)h.el.classList.add('dead');else h.el.classList.add('live');
         if(swapSel===c.id||rz)h.el.classList.add('sel');
       });
     }else{
@@ -201,7 +206,7 @@ function buildPanels(){
     var nm=view.players[seat].name.toUpperCase();
     el.innerHTML='<div class="in"><div class="av"></div><div><div class="nm"></div></div></div><div class="st"></div>';
     el.querySelector('.av').textContent=nm[0];el.querySelector('.nm').textContent=nm;
-    el.addEventListener('click',function(){if(view.spectator)return sim.send({type:'cam',seat:seat});var pj=view.pendingJoker;if(pj&&!pj.parry&&pj.by===view.you)sim.send({type:'joker',target:seat})});
+    el.addEventListener('click',function(){if(view.spectator)return sim.send({type:'cam',seat:seat});var pj=view.pendingJoker;if(pj&&!view.rules.randomJoker&&!pj.parry&&pj.by===view.you)sim.send({type:'joker',target:seat})});
     if(view.spectator)el.style.cursor='pointer';
     host.appendChild(el);panels[seat]=el;
   });
@@ -218,8 +223,8 @@ function setCount(n){var e=$('#count');if(n===lastCount)return;lastCount=n;e.tex
 function hud(){
   var v=view,mt=myTurn(),me=v.players[v.you];
   setCount(v.pileCount);
-  var pj=v.pendingJoker,choosing=!!(pj&&!v.spectator&&!pj.parry&&pj.by===v.you),deciding=!!(pj&&!v.spectator&&pj.parry&&pj.parry.to===v.you);
-  $('#rule span').textContent=v.phase==='swap'?'LOADOUT: SWAP HAND AND RESERVE':pj?(pj.parry?(deciding?'PARRY IT OR EAT IT':v.players[pj.parry.to].name.toUpperCase()+' MAY PARRY...'):choosing?'PICK YOUR VICTIM':'JOKER...'):shortRule(v.restriction);
+  var pj=v.pendingJoker,choosing=!!(pj&&!v.spectator&&!v.rules.randomJoker&&!pj.parry&&pj.by===v.you),deciding=!!(pj&&!v.spectator&&pj.parry&&pj.parry.to===v.you);
+  $('#rule span').textContent=v.phase==='swap'?'LOADOUT: SWAP HAND AND RESERVE':pj?(pj.parry?(deciding?'PARRY IT OR EAT IT':v.players[pj.parry.to].name.toUpperCase()+' MAY PARRY...'):choosing?'PICK YOUR VICTIM':(pj.by===v.you&&v.rules.randomJoker?'RANDOM VICTIM...':'JOKER...')):shortRule(v.restriction);
   $('#parry').style.display=deciding?'block':'none';$('#parrybtn').style.display=v.parryId!=null?'':'none';
   $('#ring').classList.toggle('ccw',v.direction===-1);
   var w=$('#wedge');
@@ -246,19 +251,19 @@ function pt(e){var r=fitEl.getBoundingClientRect();return{x:(e.clientX-r.left)/s
 function zoneCards(){return view.zone==='hand'?view.hand:view.zone==='up'?view.players[view.you].up:[]}
 function isHeld(key){return !!hold&&((hold.swap&&hold.sp.key===key)||(!!hold.ids&&hold.moved&&hold.ids.some(function(id){return 'c'+id===key})))}
 function byId(id){return zoneCards().find(function(c){return c.id===id})}
-function okRank(c){return view.playable.indexOf(c.rank)>=0}
+function okRank(c){return !dims()||view.playable.indexOf(c.rank)>=0}
 function selCards(){return sel.map(byId).filter(Boolean)}
 // same rank, or 6s together with 7s (never all four 6s plus a 7: the engine refuses that)
 function canJoin(c,cur){
   var all=cur.concat([c]),rs=[];all.forEach(function(x){if(rs.indexOf(x.rank)<0)rs.push(x.rank)});
   if(rs.length===1)return true;
-  if(rs.length===2&&rs.indexOf(6)>=0&&rs.indexOf(7)>=0)return all.filter(function(x){return x.rank===6}).length<4;
+  if(R().combo&&rs.length===2&&rs.indexOf(6)>=0&&rs.indexOf(7)>=0)return all.filter(function(x){return x.rank===6}).length<4;
   return false;
 }
 function raise(c){var cur=selCards();if(cur.length&&!canJoin(c,cur))cur=[];sel=cur.concat([c]).map(function(x){return x.id})}
 function raiseRank(c){
   var cs=zoneCards().filter(function(x){return x.rank===c.rank});sel=cs.map(function(x){return x.id});
-  if(c.rank===6||c.rank===7){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});if(c.rank===6&&cs.length>=4)o=[];if(c.rank===7&&o.length>=4)o=[];sel=sel.concat(o.map(function(x){return x.id}))}
+  if(R().combo&&(c.rank===6||c.rank===7)){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});if(c.rank===6&&cs.length>=4)o=[];if(c.rank===7&&o.length>=4)o=[];sel=sel.concat(o.map(function(x){return x.id}))}
 }
 function lower(c){sel=sel.filter(function(id){return id!==c.id})}
 function stackTo(x,y,dur){hold.ids.forEach(function(id,i){var sp=sprites.get('c'+id);if(sp)put(sp,{x:x-i*12,y:y-i*12,r:-4+i*5,s:1.12,z:900-i},{dur:dur})});xn.style.transform='translate('+(x+56)+'px,'+(y-110)+'px)'}
@@ -356,7 +361,7 @@ sim.onError=async function(msg){
 };
 var MULTI=['','','DOUBLE!','TRIPLE!','QUAD!'];
 async function impact(ev){
-  var n=ev.cards.length,r=ev.cards[n-1].rank,special=!!TAG[r]||r===15,bigHit=n>1||special,c=COL[ev.seat%6];
+  var n=ev.cards.length,r=ev.cards[n-1].rank,special=!!TAG(r)||r===15,bigHit=n>1||special,c=COL[ev.seat%6];
   setCount(ev.pileBefore+n);
   spark(PILE.x,PILE.y,8+n*6,['#fff',c],14+n*5);
   sfx.hit(n,ev.seat);sfx.sting(r,ev.seat);
@@ -364,7 +369,7 @@ async function impact(ev){
   trauma=Math.min(1,trauma+.28+n*.14);
   if(n>1)stamp(MULTI[n]||n+' HIT!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:60,dur:800,r:-10});
   if(r===2)stamp('RESET',PILE.x+190,PILE.y-135,{size:50,dur:800,r:6});
-  if(r===3)stamp('GHOST: LOOK THROUGH IT',PILE.x+190,PILE.y-135,{size:30,dur:1000,r:5,fg:'#19e3ff'});
+  if(r===3&&R().r3)stamp('GHOST: LOOK THROUGH IT',PILE.x+190,PILE.y-135,{size:30,dur:1000,r:5,fg:'#19e3ff'});
   if(r===7)stamp('LOW BLOW!',PILE.x+190,PILE.y-135,{size:50,dur:800,r:6,fg:'#19e3ff'});
   if(r===11)stamp('JACKS ONLY',PILE.x+190,PILE.y-135,{size:46,dur:800,r:6});
 }
@@ -401,7 +406,7 @@ var A={
     setCount(0);await wait(820);
     stamp(isMe(ev.seat)?'GO AGAIN!':view.players[ev.seat].name.toUpperCase()+' GOES AGAIN',640,440,{size:44,dur:800,r:-3});await wait(300);
   },
-  pickup:async function(ev){await eat(ev.seat,ev.count)},
+  pickup:async function(ev){if(ev.penalty){stamp('MISPLAY! TAKE IT',640,250,{fg:'#fff',bg:'#ff2e88',size:60,dur:900});sfx.block();trauma=Math.min(1,trauma+.4);await wait(300)}await eat(ev.seat,ev.count)},
   flipfail:async function(ev){
     var mine=isMe(ev.seat),ds=sprites.get('d'+ev.seat+'_'+(mine?lastDownK:view.players[ev.seat].downCount-1)),o=ds?{x:ds.x,y:ds.y}:posOf(ev.seat);
     if(ds)kill(ds);var sp=mk('c'+ev.card.id,ev.card,o.x,o.y,{s:mine?1:.5,z:800});sp.role='pile';

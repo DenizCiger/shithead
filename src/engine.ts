@@ -19,6 +19,36 @@ export interface Player {
 
 export type Phase = 'swap' | 'playing' | 'finished';
 
+export type Difficulty = 'assisted' | 'normal' | 'expert';
+/**
+ * Room rules. Everything except `difficulty` is a toggleable rule; 2 (reset), 7 (7 or lower), J (jacks only)
+ * and picking up the pile are always on.
+ */
+export interface Rules {
+  jokers: boolean; // two jokers per deck; a joker hands the pile to anyone
+  parry: boolean; // a targeted player holding a joker may bounce the pile back (needs jokers)
+  r3: boolean; // 3 is always playable and transparent
+  r4: boolean; // 4 reverses direction
+  r8: boolean; // 8 skips the next player
+  r10: boolean; // 10 is always playable and burns the pile
+  four: boolean; // four of a kind in a row burns the pile
+  combo: boolean; // 6s may be followed by 7s in one throw (the "67")
+  randomJoker: boolean; // the joker's target is drawn at random instead of chosen
+  /** assisted: unplayable cards dimmed; normal: not dimmed, blocked; expert: playing an illegal card takes the pile */
+  difficulty: Difficulty;
+}
+export const AHIF: Rules = { jokers: true, parry: true, r3: true, r4: true, r8: true, r10: true, four: true, combo: true, randomJoker: false, difficulty: 'assisted' };
+export const CLASSIC: Rules = { jokers: true, parry: false, r3: false, r4: false, r8: false, r10: true, four: true, combo: false, randomJoker: false, difficulty: 'assisted' };
+/** Keys of the boolean rules, in display order. */
+export const RULE_KEYS = ['jokers', 'parry', 'r3', 'r4', 'r8', 'r10', 'four', 'combo', 'randomJoker'] as const;
+export function normalizeRules(r: Partial<Rules> | undefined): Rules {
+  const o: Rules = { ...AHIF };
+  for (const k of RULE_KEYS) if (typeof r?.[k] === 'boolean') o[k] = r[k]!;
+  if (r?.difficulty === 'assisted' || r?.difficulty === 'normal' || r?.difficulty === 'expert') o.difficulty = r.difficulty;
+  if (!o.jokers) { o.parry = false; o.randomJoker = false; }
+  return o;
+}
+
 export interface State {
   phase: Phase;
   players: Player[];
@@ -36,6 +66,7 @@ export interface State {
   pendingJoker: { by: number; parry?: { from: number; to: number } } | null;
   shithead: number | null;
   log: string[];
+  rules: Rules;
 }
 
 export type Result = { ok: true; state: State } | { ok: false; error: string };
@@ -64,14 +95,16 @@ export function rankName(r: number): string {
   return String(r);
 }
 
-function buildDeck(decks: number): Card[] {
+function buildDeck(decks: number, jokers = true): Card[] {
   const out: Card[] = [];
   let id = 0;
   const suits: Suit[] = ['C', 'D', 'H', 'S'];
   for (let d = 0; d < decks; d++) {
     for (const s of suits) for (let r = 2; r <= 14; r++) out.push({ id: id++, rank: r, suit: s });
-    out.push({ id: id++, rank: JOKER, suit: 'X' });
-    out.push({ id: id++, rank: JOKER, suit: 'X' });
+    if (jokers) {
+      out.push({ id: id++, rank: JOKER, suit: 'X' });
+      out.push({ id: id++, rank: JOKER, suit: 'X' });
+    }
   }
   return out;
 }
@@ -90,9 +123,9 @@ export function defaultDecks(players: number): number {
   return Math.ceil(players / 2);
 }
 
-export function newGame(names: string[], rng: Rng = Math.random, decks: number = defaultDecks(names.length)): State {
+export function newGame(names: string[], rng: Rng = Math.random, decks: number = defaultDecks(names.length), rules: Rules = AHIF): State {
   if (names.length < MIN_PLAYERS || names.length > MAX_PLAYERS) throw new Error('2-6 players required');
-  const deck = shuffle(buildDeck(decks), rng);
+  const deck = shuffle(buildDeck(decks, rules.jokers), rng);
   const players: Player[] = names.map((name) => ({ name, hand: [], up: [], down: [], ready: false }));
   for (const p of players) {
     for (let i = 0; i < 3; i++) p.down.push(deck.pop()!);
@@ -113,6 +146,7 @@ export function newGame(names: string[], rng: Rng = Math.random, decks: number =
     pendingJoker: null,
     shithead: null,
     log: ['Swap your hand and face-up cards, then press Ready.'],
+    rules: { ...rules },
   };
 }
 
@@ -141,15 +175,20 @@ export function zoneOf(p: Player): Zone | null {
 }
 
 /** Top card that matters for restrictions: 3s are transparent. */
-export function effectiveTop(pile: Card[]): Card | null {
-  for (let i = pile.length - 1; i >= 0; i--) if (pile[i]!.rank !== 3) return pile[i]!;
+export function effectiveTop(pile: Card[], rules: Rules = AHIF): Card | null {
+  for (let i = pile.length - 1; i >= 0; i--) if (!(rules.r3 && pile[i]!.rank === 3)) return pile[i]!;
   return null;
 }
 
+/** Ranks that can always be played (and 2, which also resets the pile). */
+export function isWild(rank: number, rules: Rules = AHIF): boolean {
+  return rank === 2 || (rank === 3 && rules.r3) || (rank === 10 && rules.r10) || (rank === JOKER && rules.jokers);
+}
+
 /** Can a card of `rank` be played on this pile? */
-export function rankAllowed(rank: number, pile: Card[]): boolean {
-  if (rank === 2 || rank === 3 || rank === 10 || rank === JOKER) return true;
-  const top = effectiveTop(pile);
+export function rankAllowed(rank: number, pile: Card[], rules: Rules = AHIF): boolean {
+  if (isWild(rank, rules)) return true;
+  const top = effectiveTop(pile, rules);
   if (!top) return true;
   if (top.rank === 7) return rank <= 7;
   if (top.rank === 11) return rank === 11;
@@ -157,13 +196,14 @@ export function rankAllowed(rank: number, pile: Card[]): boolean {
 }
 
 /** Human-readable restriction for the UI. */
-export function restriction(pile: Card[]): string {
-  const top = effectiveTop(pile);
+export function restriction(pile: Card[], rules: Rules = AHIF): string {
+  const top = effectiveTop(pile, rules);
+  const wild = ['2', ...(rules.r3 ? ['3'] : []), ...(rules.r10 ? ['10'] : []), ...(rules.jokers ? ['Joker'] : [])].join(', ');
   if (!top) return 'Anything goes';
-  if (top.rank === 7) return '7 or lower (or 2, 3, 10, Joker)';
-  if (top.rank === 11) return 'J (or 2, 3, 10, Joker)';
+  if (top.rank === 7) return `7 or lower (or ${wild})`;
+  if (top.rank === 11) return `J (or ${wild})`;
   if (top.rank === 2) return 'Anything goes';
-  return `${rankName(top.rank)} or higher (or 2, 3, 10, Joker)`;
+  return `${rankName(top.rank)} or higher (or ${wild})`;
 }
 
 function topRun(pile: Card[]): number {
@@ -193,7 +233,7 @@ export function playableRanks(s: State, seat: number): number[] {
   const z = zoneOf(p);
   if (!z || z === 'down') return [];
   const ranks = new Set<number>();
-  for (const c of p[z]) if (rankAllowed(c.rank, s.pile)) ranks.add(c.rank);
+  for (const c of p[z]) if (rankAllowed(c.rank, s.pile, s.rules)) ranks.add(c.rank);
   return [...ranks];
 }
 
@@ -231,7 +271,7 @@ function startPlaying(n: State) {
   let best: { seat: number; c: Card } | null = null;
   n.players.forEach((p, seat) => {
     for (const c of p.hand) {
-      if (c.rank === 2 || c.rank === 3 || c.rank === 10 || c.rank === JOKER) continue;
+      if (isWild(c.rank, n.rules)) continue;
       if (!best || c.rank < best.c.rank || (c.rank === best.c.rank && SUIT_ORDER[c.suit] < SUIT_ORDER[best.c.suit]))
         best = { seat, c };
     }
@@ -302,10 +342,10 @@ export function play(s: State, seat: number, ids: number[]): Result {
   const ranks = [...new Set(cards.map((c) => c.rank))];
   let combo = false;
   if (ranks.length > 1) {
-    if (ranks.length === 2 && ranks.includes(6) && ranks.includes(7)) {
+    if (n.rules.combo && ranks.length === 2 && ranks.includes(6) && ranks.includes(7)) {
       combo = true;
       cards = [...cards.filter((c) => c.rank === 6), ...cards.filter((c) => c.rank === 7)];
-    } else return { ok: false, error: 'You can only play cards of the same rank (6s may be followed by 7s)' };
+    } else return { ok: false, error: n.rules.combo ? 'You can only play cards of the same rank (6s may be followed by 7s)' : 'You can only play cards of the same rank' };
   }
   const first = cards[0]!.rank;
   const name = p.name;
@@ -314,7 +354,7 @@ export function play(s: State, seat: number, ids: number[]): Result {
   if (zone === 'down') {
     const c = cards[0]!;
     p.down = p.down.filter((x) => x.id !== c.id);
-    if (!rankAllowed(c.rank, n.pile)) {
+    if (!rankAllowed(c.rank, n.pile, n.rules)) {
       addLog(n, `${name} flips a ${cardLabel(c)} blind — can't play it and picks up the pile.`);
       p.hand.push(...n.pile, c);
       p.hand.sort(cmpCard);
@@ -324,7 +364,15 @@ export function play(s: State, seat: number, ids: number[]): Result {
     }
     addLog(n, `${name} flips a ${cardLabel(c)} blind.`);
     p.down.push(c); // put back temporarily so common removal below works
-  } else if (!rankAllowed(first, n.pile)) {
+  } else if (!rankAllowed(first, n.pile, n.rules) || (combo && !rankAllowed(6, n.pile, n.rules))) {
+    if (n.rules.difficulty === 'expert') { // expert: a misplay takes the pile as a penalty
+      addLog(n, `${name} tried to play ${cardLabel(cards[0]!)} on this pile — penalty, takes the pile (${n.pile.length} cards).`);
+      p.hand.push(...n.pile);
+      p.hand.sort(cmpCard);
+      n.pile = [];
+      n.current = advance(n, seat, 1);
+      return { ok: true, state: n };
+    }
     return { ok: false, error: `Can't play ${cardLabel(cards[0]!)} on this pile` };
   }
 
@@ -340,11 +388,11 @@ export function play(s: State, seat: number, ids: number[]): Result {
   const playGroup = (group: Card[]) => {
     const r = group[0]!.rank;
     n.pile.push(...group);
-    if (r === 4) flips += group.length;
-    if (r === 8) skips += group.length;
-    if (r === 10) burn = true;
+    if (r === 4 && n.rules.r4) flips += group.length;
+    if (r === 8 && n.rules.r8) skips += group.length;
+    if (r === 10 && n.rules.r10) burn = true;
     if (r === JOKER) joker = true;
-    if (r !== JOKER && topRun(n.pile) >= 4) burn = true;
+    if (n.rules.four && r !== JOKER && topRun(n.pile) >= 4) burn = true;
   };
 
   if (combo) {
@@ -426,7 +474,7 @@ export function jokerTarget(s: State, seat: number, target: number): Result {
   if (target === seat || !s.players[target]) return { ok: false, error: 'Pick another player' };
   const n = clone(s);
   const t = n.players[target]!;
-  if (isActive(n, target) && hasJoker(t)) {
+  if (n.rules.parry && isActive(n, target) && hasJoker(t)) {
     n.pendingJoker = { by: seat, parry: { from: seat, to: target } };
     addLog(n, `${n.players[seat]!.name} sends the pile at ${t.name} — they hold a Joker and can parry!`);
     return { ok: true, state: n };
@@ -438,7 +486,7 @@ export function jokerTarget(s: State, seat: number, target: number): Result {
 /** The targeted player plays a joker from their hand to deflect the stack back at whoever threw it. */
 export function parry(s: State, seat: number): Result {
   const pj = s.pendingJoker;
-  if (s.phase !== 'playing' || !pj?.parry) return { ok: false, error: 'Nothing to parry' };
+  if (s.phase !== 'playing' || !pj?.parry || !s.rules.parry) return { ok: false, error: 'Nothing to parry' };
   if (pj.parry.to !== seat) return { ok: false, error: 'Not aimed at you' };
   const n = clone(s);
   const p = n.players[seat]!;
@@ -549,11 +597,11 @@ export function legalMoves(s: State, seat: number): Action[] {
   const byRank = new Map<number, Card[]>();
   for (const c of p[z]) byRank.set(c.rank, [...(byRank.get(c.rank) ?? []), c]);
   for (const [r, cs] of byRank) {
-    if (!rankAllowed(r, s.pile)) continue;
+    if (!rankAllowed(r, s.pile, s.rules)) continue;
     for (let k = 1; k <= cs.length; k++) out.push({ t: 'play', ids: cs.slice(0, k).map((c) => c.id) });
   }
   const sixes = byRank.get(6), sevens = byRank.get(7);
-  if (sixes && sevens && rankAllowed(6, s.pile)) {
+  if (s.rules.combo && sixes && sevens && rankAllowed(6, s.pile, s.rules)) {
     for (let a = 1; a <= sixes.length; a++)
       for (let b = 1; b <= sevens.length; b++)
       {

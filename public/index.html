@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Shithead 💩</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="lobby.css">
 </head>
 <body class="bk-dotfade">
 
@@ -38,29 +39,14 @@
   <div class="srow"><label>GAME SPEED (ALSO SPEEDS UP BOTS WHEN YOU HOST)</label><div class="seg" data-k="speed"></div></div>
   <div class="srow"><label>SOUND</label><div class="seg" data-k="sfx"></div></div>
   <div class="srow"><label>VOLUME</label><input type="range" id="vol" min="0" max="100"><span id="volv"></span></div>
-  <div class="srow"><button class="bigbtn" id="sclose">CLOSE</button></div>
+  <div class="srow"><button class="bigbtn" id="sclose">CLOSE</button> <button class="bigbtn sec" id="sleave">LEAVE ROOM</button></div>
 </div></div>
-<div id="rules"><div class="sbox">
-  <h2>HOW TO PLAY</h2>
-  <p class="rl">Get rid of all your cards. The last player holding cards is the <b>shithead</b>. Play your hand first, then your face-up cards, then your face-down cards blind.</p>
-  <table class="rt">
-    <tr><th>CARD</th><th>WHAT IT DOES</th></tr>
-    <tr><td>3 5 6 9 Q K A</td><td>Play equal or higher than the top card.</td></tr>
-    <tr><td>2</td><td>Always playable. Resets the pile: anything goes next.</td></tr>
-    <tr><td>3</td><td>Always playable. Transparent: the card under it counts.</td></tr>
-    <tr><td>4</td><td>Reverses direction.</td></tr>
-    <tr><td>7</td><td>Next player must play 7 or lower. 6s may be followed by 7s.</td></tr>
-    <tr><td>8</td><td>Skips the next player (stacks).</td></tr>
-    <tr><td>10</td><td>Always playable. Burns the pile; you play again.</td></tr>
-    <tr><td>J</td><td>Next player must play a J (or a 2, 3, 10, Joker).</td></tr>
-    <tr><td>JOKER</td><td>Hand the whole pile to anyone, even a player who is out. If they hold a Joker they can parry it back at you.</td></tr>
-  </table>
-  <p class="rl">Same-rank cards can be played together. Four in a row burns the pile. Can't play? Pick up the pile.</p>
-  <div class="srow"><button class="bigbtn" id="rclose">CLOSE</button></div>
-</div></div>
+<div id="rules"><div class="sbox"></div></div>
+<div id="modal"></div>
 <div id="toast"></div>
 <div id="conn">RECONNECTING…</div>
 <script src="sfx.js"></script>
+<script src="rules.js"></script>
 <script src="game.js"></script>
 <script src="net.js"></script>
 </body>

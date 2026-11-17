@@ -158,3 +158,70 @@ test('default deck count is ceil(players / 2)', () => {
   }
   assert.equal(E.allCards(E.newGame(['a', 'b'], E.mulberry32(3), 2)).length, 108);
 });
+
+// ---------------------------------------------------------------- room rules
+
+const withRules = (s: State, r: Partial<E.Rules>): State => { s.rules = E.normalizeRules({ ...s.rules, ...r }); return s; };
+
+test('classic: 3 is an ordinary card, no transparency', () => {
+  const s = withRules(mk([[C(3), C(9)], [C(5)]], [C(9)]), E.CLASSIC);
+  bad(E.play(s, 0, [s.players[0]!.hand[0]!.id])); // a 3 on a 9 is illegal
+  assert.equal(E.effectiveTop([C(9), C(3)], E.CLASSIC)!.rank, 3);
+  assert.equal(E.effectiveTop([C(9), C(3)], E.AHIF)!.rank, 9);
+});
+test('classic: 4 does not reverse, 8 does not skip, 6+7 is not a combo', () => {
+  let s = withRules(mk([[C(4), C(9)], [C(5)], [C(5)]], [C(2)]), E.CLASSIC);
+  let n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
+  assert.equal(n.direction, 1); assert.equal(n.current, 1);
+  s = withRules(mk([[C(8), C(9)], [C(5)], [C(5)]], [C(2)]), E.CLASSIC);
+  n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
+  assert.equal(n.current, 1);
+  s = withRules(mk([[C(6), C(7), C(9)], [C(5)]], [C(5)]), E.CLASSIC);
+  bad(E.play(s, 0, [s.players[0]!.hand[0]!.id, s.players[0]!.hand[1]!.id]));
+});
+test('10 and four-of-a-kind burns can be switched off', () => {
+  let s = withRules(mk([[C(10), C(5)], [C(4)]], [C(9)]), { r10: false });
+  let n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
+  assert.equal(n.pile.length, 2); assert.equal(n.current, 1);
+  s = withRules(mk([[C(9)], [C(5)]], [C(9), C(9), C(9)]), { four: false });
+  assert.equal(ok(E.play(s, 0, [s.players[0]!.hand[0]!.id])).pile.length, 4);
+});
+test('parry off: a joker holder simply takes the pile', () => {
+  const s = withRules(mk([[C(E.JOKER, 'X'), C(5)], [C(E.JOKER, 'X'), C(6)], [C(7)]], [C(9)]), { parry: false });
+  let n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
+  n = ok(E.jokerTarget(n, 0, 1));
+  assert.equal(n.pendingJoker, null); assert.equal(n.players[1]!.hand.length, 3);
+});
+test('jokers off: no jokers in the deck, and parry/random are forced off', () => {
+  const r = E.normalizeRules({ jokers: false, parry: true, randomJoker: true });
+  assert.ok(!r.parry && !r.randomJoker);
+  assert.equal(E.allCards(E.newGame(['a', 'b'], E.mulberry32(2), 1, r)).length, 52);
+});
+test('expert difficulty: an illegal play takes the pile; other difficulties just refuse', () => {
+  const mkp = (d: E.Difficulty) => withRules(mk([[C(5), C(9)], [C(4)]], [C(12), C(13)]), { difficulty: d });
+  bad(E.play(mkp('normal'), 0, [mkp('normal').players[0]!.hand[0]!.id]));
+  const s = mkp('expert');
+  const n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
+  assert.equal(n.pile.length, 0); assert.equal(n.players[0]!.hand.length, 4); assert.equal(n.current, 1);
+});
+test('fuzz: random rule sets conserve cards and terminate', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const rng = E.mulberry32(seed + 900);
+    const rules = E.normalizeRules(Object.fromEntries(E.RULE_KEYS.map((k) => [k, rng() < 0.6])) as Partial<E.Rules>);
+    const np = 2 + (seed % 5);
+    let s = E.newGame(Array.from({ length: np }, (_, i) => 'P' + i), rng, undefined, rules);
+    const total = E.allCards(s).length;
+    for (let i = 0; i < np; i++) s = ok(E.setReady(s, i));
+    let steps = 0;
+    while (s.phase === 'playing') {
+      assert.ok(++steps < 300000, `seed ${seed} did not terminate`);
+      const actor = E.actingSeat(s);
+      const moves = E.legalMoves(s, actor);
+      assert.ok(moves.length, `seed ${seed}: no moves`);
+      const plays = moves.filter((m) => m.t !== 'pickup');
+      const m = plays.length && rng() < 0.9 ? plays[Math.floor(rng() * plays.length)]! : moves[Math.floor(rng() * moves.length)]!;
+      s = ok(E.applyAction(s, actor, m));
+      assert.equal(E.allCards(s).length + s.burnedCount, total);
+    }
+  }
+});
