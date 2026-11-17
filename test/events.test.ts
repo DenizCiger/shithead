@@ -47,3 +47,12 @@ test('events: accept gives the pile to the decider', () => {
   assert.deepEqual(evs[0], { t: 'give', by: 0, target: 1, count: 2, revived: false });
   assert.equal(n.current, 0);
 });
+
+test('events: a 67 keeps its throw order and three pairs burn as a combo', () => {
+  const six = [C(6), C(6, 'S'), C(6, 'D')], seven = [C(7), C(7, 'S'), C(7, 'D')];
+  const s0 = mk([[...six, ...seven, C(9)], [C(5)]], [C(5)]);
+  const play = { type: 'play', ids: six.flatMap((c, i) => [c.id, seven[i]!.id]) };
+  const evs = deriveEvents(s0, ok(E.play(s0, 0, play.ids)), 0, play);
+  assert.deepEqual((evs[0]!.cards as Card[]).map((c) => c.rank), [6, 7, 6, 7, 6, 7]);
+  assert.deepEqual(evs[1], { t: 'burn', seat: 0, count: 7, by: 'combo' });
+});

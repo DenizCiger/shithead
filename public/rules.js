@@ -9,7 +9,7 @@
     { k: 'r3', short: '3 GLASS', cards: '3', tier: 'bonus', desc: 'Always playable and transparent: the card underneath still counts.' },
     { k: 'r4', short: '4 REVERSE', cards: '4', tier: 'bonus', desc: 'Reverses the direction of play (acts as a skip with two players left).' },
     { k: 'r8', short: '8 SKIP', cards: '8', tier: 'bonus', desc: 'Skips the next player. Several 8s skip several players.' },
-    { k: 'combo', short: '67', cards: '6 + 7', tier: 'bonus', desc: '6s may be followed by 7s in the same throw.' },
+    { k: 'combo', short: '67', cards: '6 + 7', tier: 'bonus', desc: 'A 6 may be followed by a 7 in the same throw, and the pair repeated: 6, 7, 6, 7... Three pairs burn the pile.' },
     { k: 'parry', short: 'PARRY', cards: 'PARRY', tier: 'bonus', needs: 'jokers', desc: 'Targeted by a Joker while holding one? Play it from your hand to bounce the pile back at the caster. Can ping-pong.' },
     { k: 'randomJoker', short: 'RANDOM JOKER', cards: 'JOKER ?', tier: 'bonus', needs: 'jokers', desc: 'A Joker picks its victim at random instead of the player choosing.' }
   ];

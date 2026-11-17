@@ -32,7 +32,7 @@ export interface Rules {
   r8: boolean; // 8 skips the next player
   r10: boolean; // 10 is always playable and burns the pile
   four: boolean; // four of a kind in a row burns the pile
-  combo: boolean; // 6s may be followed by 7s in one throw (the "67")
+  combo: boolean; // a 6 may be followed by a 7 in one throw (the "67"), repeatable as 6,7,6,7…; three pairs burn
   randomJoker: boolean; // the joker's target is drawn at random instead of chosen
   /** assisted: unplayable cards dimmed; normal: not dimmed, blocked; expert: playing an illegal card takes the pile */
   difficulty: Difficulty;
@@ -206,6 +206,14 @@ export function restriction(pile: Card[], rules: Rules = AHIF): string {
   return `${rankName(top.rank)} or higher (or ${wild})`;
 }
 
+/** A throw of this many 6,7 pairs burns the pile. */
+export const COMBO_BURN_PAIRS = 3;
+
+/** 6, 7, 6, 7…: one or more 6,7 pairs in exactly that order. */
+function isComboThrow(cards: Card[]): boolean {
+  return cards.length % 2 === 0 && cards.every((c, i) => c.rank === (i % 2 === 0 ? 6 : 7));
+}
+
 function topRun(pile: Card[]): number {
   if (!pile.length) return 0;
   const r = pile[pile.length - 1]!.rank;
@@ -336,16 +344,20 @@ export function play(s: State, seat: number, ids: number[]): Result {
   if (typeof sel === 'string') return { ok: false, error: sel };
   const p = n.players[seat]!;
   const { zone } = sel;
-  let cards = sel.cards;
+  const cards = sel.cards;
 
-  // Group by rank. Allowed: one rank, or the 6+7 combo.
+  // Allowed: one rank, or the 67 combo in the order the cards were given.
   const ranks = [...new Set(cards.map((c) => c.rank))];
   let combo = false;
   if (ranks.length > 1) {
-    if (n.rules.combo && ranks.length === 2 && ranks.includes(6) && ranks.includes(7)) {
+    const sixSeven = ranks.length === 2 && ranks.includes(6) && ranks.includes(7);
+    if (n.rules.combo && sixSeven && isComboThrow(cards)) {
       combo = true;
-      cards = [...cards.filter((c) => c.rank === 6), ...cards.filter((c) => c.rank === 7)];
-    } else return { ok: false, error: n.rules.combo ? 'You can only play cards of the same rank (6s may be followed by 7s)' : 'You can only play cards of the same rank' };
+    } else if (n.rules.combo && sixSeven) {
+      return { ok: false, error: 'A 67 goes 6, 7 (or 6, 7, 6, 7...)' };
+    } else {
+      return { ok: false, error: 'You can only play cards of the same rank' };
+    }
   }
   const first = cards[0]!.rank;
   const name = p.name;
@@ -364,7 +376,7 @@ export function play(s: State, seat: number, ids: number[]): Result {
     }
     addLog(n, `${name} flips a ${cardLabel(c)} blind.`);
     p.down.push(c); // put back temporarily so common removal below works
-  } else if (!rankAllowed(first, n.pile, n.rules) || (combo && !rankAllowed(6, n.pile, n.rules))) {
+  } else if (!rankAllowed(first, n.pile, n.rules)) {
     if (n.rules.difficulty === 'expert') { // expert: a misplay takes the pile as a penalty
       addLog(n, `${name} tried to play ${cardLabel(cards[0]!)} on this pile — penalty, takes the pile (${n.pile.length} cards).`);
       p.hand.push(...n.pile);
@@ -396,11 +408,11 @@ export function play(s: State, seat: number, ids: number[]): Result {
   };
 
   if (combo) {
-    const sixes = cards.filter((c) => c.rank === 6);
-    const sevens = cards.filter((c) => c.rank === 7);
-    playGroup(sixes);
-    playGroup(sevens); // if the 6s made four of a kind, the 7s ride along and burn with the pile
-    addLog(n, `${name} plays ${sixes.length}×6 + ${sevens.length}×7.`);
+    // card by card, so a 6 that completes four of a kind burns the pile and the rest rides along
+    for (const c of cards) { playGroup([c]); }
+    const pairs = cards.length / 2;
+    if (pairs >= COMBO_BURN_PAIRS) { burn = true; }
+    addLog(n, `${name} plays 67${pairs > 1 ? ` ×${pairs}` : ''}.`);
   } else {
     playGroup(cards);
     if (zone !== 'down') addLog(n, `${name} plays ${cards.length}×${cardLabel(cards[0]!)}.`);
@@ -601,12 +613,11 @@ export function legalMoves(s: State, seat: number): Action[] {
   }
   const sixes = byRank.get(6), sevens = byRank.get(7);
   if (s.rules.combo && sixes && sevens && rankAllowed(6, s.pile, s.rules)) {
-    for (let a = 1; a <= sixes.length; a++)
-      for (let b = 1; b <= sevens.length; b++)
-      {
-        const ids = [...sixes.slice(0, a), ...sevens.slice(0, b)].map((c) => c.id);
-        if (play(s, seat, ids).ok) out.push({ t: 'play', ids });
-      }
+    const ids: number[] = [];
+    for (let k = 0; k < Math.min(sixes.length, sevens.length); k++) {
+      ids.push(sixes[k]!.id, sevens[k]!.id);
+      out.push({ t: 'play', ids: [...ids] });
+    }
   }
   return out;
 }

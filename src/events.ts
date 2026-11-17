@@ -13,12 +13,18 @@ function tail(s: E.State, n: E.State, ev: Ev[]) {
   else if (n.current !== s.current || ev.length) ev.push({ t: 'turn', seat: n.current });
 }
 
+function burnCause(cards: { rank: number }[], rules: E.Rules): 'ten' | 'combo' | 'four' {
+  if (cards[0]!.rank === 10) { return 'ten'; }
+  const sixSeven = cards.some((c) => c.rank === 6) && cards.some((c) => c.rank === 7);
+  return rules.combo && sixSeven && cards.length / 2 >= E.COMBO_BURN_PAIRS ? 'combo' : 'four';
+}
+
 function diffPlay(s: E.State, n: E.State, seat: number, ids: number[]): Ev[] {
   const ev: Ev[] = [];
   const p = s.players[seat]!;
   const zone = E.zoneOf(p)!;
   const picked = ids.map((id) => p[zone].find((c) => c.id === id)!).map(pub);
-  const cards = [...picked.filter((c) => c.rank === 6), ...picked.filter((c) => c.rank !== 6)];
+  const cards = picked;
   const penalty = zone !== 'down' && s.pile.length > 0 && n.pile.length === 0 && n.burnedCount === s.burnedCount
     && picked.every((c) => n.players[seat]![zone].some((x) => x.id === c.id));
   if (penalty) { // expert difficulty: the misplay just takes the pile
@@ -32,7 +38,7 @@ function diffPlay(s: E.State, n: E.State, seat: number, ids: number[]): Ev[] {
   } else {
     ev.push({ t: 'play', seat, cards, zone, blind: zone === 'down', pileBefore: s.pile.length });
     if (cards.some((c) => c.rank === E.JOKER)) ev.push({ t: 'joker', seat, pending: !!n.pendingJoker });
-    else if (n.burnedCount > s.burnedCount) ev.push({ t: 'burn', seat, count: n.burnedCount - s.burnedCount, by: cards[0]!.rank === 10 ? 'ten' : 'four' });
+    else if (n.burnedCount > s.burnedCount) ev.push({ t: 'burn', seat, count: n.burnedCount - s.burnedCount, by: burnCause(cards, n.rules) });
     if (n.direction !== s.direction) ev.push({ t: 'reverse', direction: n.direction });
     const eights = cards.filter((c) => c.rank === 8).length;
     if (eights && n.rules.r8 && n.burnedCount === s.burnedCount) ev.push({ t: 'skip', n: eights });

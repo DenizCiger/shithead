@@ -253,7 +253,7 @@ function isHeld(key){return !!hold&&((hold.swap&&hold.sp.key===key)||(!!hold.ids
 function byId(id){return zoneCards().find(function(c){return c.id===id})}
 function okRank(c){return !dims()||view.playable.indexOf(c.rank)>=0}
 function selCards(){return sel.map(byId).filter(Boolean)}
-// same rank, or 6s together with 7s
+// same rank, or 6s together with 7s (put in 6,7,6,7 order on the throw)
 function canJoin(c,cur){
   var all=cur.concat([c]),rs=[];all.forEach(function(x){if(rs.indexOf(x.rank)<0)rs.push(x.rank)});
   if(rs.length===1)return true;
@@ -263,11 +263,19 @@ function canJoin(c,cur){
 function raise(c){var cur=selCards();if(cur.length&&!canJoin(c,cur))cur=[];sel=cur.concat([c]).map(function(x){return x.id})}
 function raiseRank(c){
   var cs=zoneCards().filter(function(x){return x.rank===c.rank});sel=cs.map(function(x){return x.id});
-  if(R().combo&&(c.rank===6||c.rank===7)){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});sel=sel.concat(o.map(function(x){return x.id}))}
+  if(R().combo&&(c.rank===6||c.rank===7)){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});if(o.length===cs.length)sel=comboOrder(sel.concat(o.map(function(x){return x.id})))}
+}
+// a 67 must go 6,7,6,7...: interleave the selected 6s and 7s, leftovers at the end (the server then refuses it)
+function comboOrder(ids){
+  var cs=ids.map(byId),six=[],sev=[],out=[];
+  if(!cs.every(function(c){return c&&(c.rank===6||c.rank===7)}))return ids;
+  cs.forEach(function(c){(c.rank===6?six:sev).push(c.id)});
+  for(var i=0;i<Math.max(six.length,sev.length);i++){if(i<six.length)out.push(six[i]);if(i<sev.length)out.push(sev[i])}
+  return out;
 }
 function lower(c){sel=sel.filter(function(id){return id!==c.id})}
 function stackTo(x,y,dur){hold.ids.forEach(function(id,i){var sp=sprites.get('c'+id);if(sp)put(sp,{x:x-i*12,y:y-i*12,r:-4+i*5,s:1.12,z:900-i},{dur:dur})});xn.style.transform='translate('+(x+56)+'px,'+(y-110)+'px)'}
-function doThrow(){if(!sel.length||busy||!myTurn())return;var ids=sel.slice();sel=[];throwCards(ids)}
+function doThrow(){if(!sel.length||busy||!myTurn())return;var ids=comboOrder(sel);sel=[];throwCards(ids)}
 stage.addEventListener('pointerdown',function(e){
   if(!view||busy)return;if(e.target.closest&&e.target.closest('button,.panel'))return;
   var el=e.target.closest&&e.target.closest('.card'),p=pt(e);
@@ -354,7 +362,7 @@ sim.onError=async function(msg){
   if(fl.length){
     spark(PILE.x,PILE.y,14,['#fff','#ff2e88'],18);await hitstop(70,false);trauma=.6;
     stamp('BLOCKED!',640,250,{fg:'#fff',bg:'#ff2e88',size:84,dur:750});
-    stamp(msg.replace(' (6s may be followed by 7s)','').toUpperCase(),640,345,{fg:'#ff2e88',bg:'#000',size:24,dur:1300,r:-3});
+    stamp(msg.toUpperCase(),640,345,{fg:'#ff2e88',bg:'#000',size:24,dur:1300,r:-3});
     fl.forEach(function(sp){put(sp,{x:sp.x+jit(sp.card.id,160),y:sp.y+150,r:sp.r+540,s:1},{dur:230,ease:'ease-out'})});
     await wait(240);
   }else stamp(msg.toUpperCase(),640,520,{fg:'#fff',bg:'#ff2e88',size:34,dur:900,r:-3});
@@ -369,7 +377,7 @@ async function impact(ev){
   if(bigHit){await hitstop(70+n*35,true);flash(c,.35,200)}else{await hitstop(38,false)}
   trauma=Math.min(1,trauma+.28+n*.14);
   var combo=ev.cards.some(function(x){return x.rank===6})&&ev.cards.some(function(x){return x.rank===7});
-  if(combo)stamp('67!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:80,dur:900,r:-10});
+  if(combo)stamp(n>2?'67 x'+n/2+'!':'67!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:80,dur:900,r:-10});
   else if(n>1)stamp(MULTI[n]||n+' HIT!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:60,dur:800,r:-10});
   if(r===2)stamp('RESET',PILE.x+190,PILE.y-135,{size:50,dur:800,r:6});
   if(r===3&&R().r3)stamp('GHOST: LOOK THROUGH IT',PILE.x+190,PILE.y-135,{size:30,dur:1000,r:5,fg:'#19e3ff'});
@@ -402,7 +410,7 @@ var A={
   },
   burn:async function(ev){
     sfx.burn();await hitstop(260,true);flash('#fff',1,500);trauma=1;
-    stamp(ev.by==='four'?'FOUR OF A KIND':'TEN!',640,170,{size:50,dur:1000,fg:'#000',bg:'#ffe600',r:-4});
+    stamp(ev.by==='four'?'FOUR OF A KIND':ev.by==='combo'?'TRIPLE 67':'TEN!',640,170,{size:50,dur:1000,fg:'#000',bg:'#ffe600',r:-4});
     stamp('BURN!!',640,300,{size:190,dur:1000,fg:'#fff',bg:'#ff2e88',r:-8});
     spark(PILE.x,PILE.y,46,['#fff','#ffe600','#ff2e88'],34);
     sprites.forEach(function(sp){if(sp.role==='pile'||sp.role==='fly'){put(sp,{x:BURN.x+jit(sp.card.id,80),y:BURN.y+jit(sp.card.id+3,200),r:700,s:.6},{dur:300,delay:Math.random()*120,ease:'cubic-bezier(.6,0,1,.4)'});(function(sp){setTimeout(function(){kill(sp)},430)})(sp)}});
