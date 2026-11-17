@@ -22,7 +22,7 @@ function diffPlay(s: E.State, n: E.State, seat: number, ids: number[]): Ev[] {
   const penalty = zone !== 'down' && s.pile.length > 0 && n.pile.length === 0 && n.burnedCount === s.burnedCount
     && picked.every((c) => n.players[seat]![zone].some((x) => x.id === c.id));
   if (penalty) { // expert difficulty: the misplay just takes the pile
-    ev.push({ t: 'pickup', seat, count: s.pile.length, penalty: true });
+    ev.push({ t: 'pickup', seat, count: s.pile.length, penalty: true, shot: n.rules.shot });
     tail(s, n, ev);
     return ev;
   }
