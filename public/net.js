@@ -175,7 +175,7 @@
               !st.spectator && h('button', { class: 'btn sm sec', style: 'justify-self:start', onclick: function () { send({ type: 'spectate' }); } }, '👁 WATCH INSTEAD')))),
         wall()),
       h('div', { class: 'bar' },
-        h('button', { class: 'btn ghost', onclick: openLeave }, '⏻ LEAVE', h('span', { class: 'lg' }, ' ROOM')),
+        h('button', { class: 'btn sec', onclick: openLeave }, '⏻ LEAVE', h('span', { class: 'lg' }, ' ROOM')),
         host ? h('button', { class: 'btn big', style: '--sh:var(--m)', disabled: st.seats.length < 2, onclick: function () { send({ type: 'start' }); } }, st.seats.length < 2 ? 'NEED 2+' : 'START', h('span', { class: 'lg' }, st.seats.length < 2 ? ' PLAYERS' : ' GAME'))
              : h('span', { class: 'wait cut' }, 'WAITING FOR ♛ ' + hostName() + '…')));
   }

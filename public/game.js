@@ -367,7 +367,9 @@ async function impact(ev){
   sfx.hit(n,ev.seat);sfx.sting(r,ev.seat);
   if(bigHit){await hitstop(70+n*35,true);flash(c,.35,200)}else{await hitstop(38,false)}
   trauma=Math.min(1,trauma+.28+n*.14);
-  if(n>1)stamp(MULTI[n]||n+' HIT!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:60,dur:800,r:-10});
+  var combo=ev.cards.some(function(x){return x.rank===6})&&ev.cards.some(function(x){return x.rank===7});
+  if(combo)stamp('67!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:80,dur:900,r:-10});
+  else if(n>1)stamp(MULTI[n]||n+' HIT!',PILE.x-190,PILE.y-120,{fg:'#000',bg:c,size:60,dur:800,r:-10});
   if(r===2)stamp('RESET',PILE.x+190,PILE.y-135,{size:50,dur:800,r:6});
   if(r===3&&R().r3)stamp('GHOST: LOOK THROUGH IT',PILE.x+190,PILE.y-135,{size:30,dur:1000,r:5,fg:'#19e3ff'});
   if(r===7)stamp('LOW BLOW!',PILE.x+190,PILE.y-135,{size:50,dur:800,r:6,fg:'#19e3ff'});
