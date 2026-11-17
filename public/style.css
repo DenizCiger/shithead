@@ -181,6 +181,7 @@ body.inroom #chat{display:flex}
 #chatlog{display:none;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;height:min(260px,40vh);margin-bottom:4px;background:rgba(0,0,0,.3);color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:auto;scrollbar-width:thin;scrollbar-color:#666 transparent}
 #chat.open #chatlog{display:flex;flex-direction:column}
 #chatlog>.cm:first-child{margin-top:auto} /* anchor to the bottom like Minecraft; older lines scroll up */
+#deckn{position:absolute;left:885px;top:222px;width:80px;margin-left:-40px;text-align:center;font-size:34px;line-height:1;color:#fff;-webkit-text-stroke:2px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #000;z-index:2;pointer-events:none}
 #chatlog .cm:hover{background:rgba(40,40,46,.8)}
 #chatlog b,#chatfeed b{font-weight:800}
 #chatin{pointer-events:auto;border:2px solid #444;background:rgba(0,0,0,.7);color:#fff;font:600 14px system-ui,sans-serif;padding:6px 10px;outline:none;width:100%;box-sizing:border-box}
@@ -190,7 +191,7 @@ body:not(.ingame) #chat{bottom:86px}
 /* ---- reactions: a badge on each opponent panel opens a small picker for that player */
 .rxbtn{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;padding:0;border:3px solid #fff;border-radius:50%;background:#000;font-size:18px;line-height:1;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center}
 .rxbtn:hover{background:var(--m);transform:scale(1.15)}
-.rxpick{position:absolute;width:284px;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:6px;background:#0b0b0d;border:4px solid var(--m);box-shadow:6px 6px 0 var(--y);pointer-events:auto}
+.rxpick{position:absolute;width:338px;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:6px;background:#0b0b0d;border:4px solid var(--m);box-shadow:6px 6px 0 var(--y);pointer-events:auto}
 .rxpick button{font-size:30px;line-height:1;padding:5px 0;background:#000;border:2px solid #333;cursor:pointer}
 .rxpick button:hover{border-color:var(--y);background:#1a1a1f}
 .rxfly{position:absolute;left:0;top:0;pointer-events:none;z-index:80;display:flex;flex-direction:column;align-items:center;margin:-38px 0 0 -70px;width:140px;opacity:0}

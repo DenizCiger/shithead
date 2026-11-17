@@ -119,7 +119,7 @@ var TAG0={2:'RESET',3:'GHOST',4:'REVERSE',7:'LOW BLOW',8:'SKIP',10:'BURN',11:'JA
 // card captions follow the room's rules: a 3 is only a "ghost" when 3s are transparent, and so on
 var R=function(){return(view&&view.rules)||{r3:true,r4:true,r8:true,r10:true,four:true,combo:true,jokers:true,parry:true,randomJoker:false,difficulty:'assisted'}};
 var TAG=function(r){return(!TAGK[r]||R()[TAGK[r]])?TAG0[r]:undefined};
-var REACTIONS=['\uD83D\uDD95','\uD83D\uDE02','\uD83D\uDE21','\uD83D\uDE2D','\uD83D\uDC4D','\uD83D\uDC4F','\uD83D\uDD25','\uD83D\uDC80','\uD83E\uDD21','\uD83D\uDE08','\uD83D\uDE4F','\uD83E\uDEE1'];
+var REACTIONS=['\uD83D\uDD95','\uD83D\uDE02','\uD83D\uDE21','\uD83D\uDE2D','\uD83D\uDC4D','\uD83D\uDC4F','\uD83D\uDD25','\uD83D\uDC80','\uD83E\uDD21','\uD83D\uDE08','\uD83D\uDE4F','\uD83E\uDEE1','\uD83E\uDEC0','\uD83C\uDF45'];
 var HANDX=330,RESX=890,PILE={x:640,y:300},DECK={x:885,y:300},BURN={x:1400,y:-80},HAND={x:640,y:600},RES={x:62,y:640};
 var SLOT={
   left:{x:140,y:236,res:'below',wedge:'polygon(640px 300px,0px 20px,0px 500px)'},
@@ -251,7 +251,7 @@ function closePicker(){var o=rxui.querySelector('.rxpick');if(o)o.remove()}
 function openPicker(seat,bx,by){
   var had=rxui.querySelector('.rxpick');closePicker();if(had&&had.dataset.seat==seat)return;
   var d=document.createElement('div');d.className='rxpick';d.dataset.seat=seat;
-  d.style.left=Math.max(8,Math.min(W-292,bx-146))+'px';d.style.top=(by+22)+'px';
+  d.style.left=Math.max(8,Math.min(W-358,bx-179))+'px';d.style.top=(by+22)+'px';
   REACTIONS.forEach(function(e){var b=document.createElement('button');b.textContent=e;b.setAttribute('aria-label','Send '+e);
     b.addEventListener('click',function(ev){ev.stopPropagation();sim.send({type:'react',emoji:e,to:seat});closePicker()});d.appendChild(b)});
   d.addEventListener('pointerdown',function(e){e.stopPropagation()});

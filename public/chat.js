@@ -33,21 +33,25 @@
     if (window.Net) Net.send({ type: 'chat', text: v });
     input.value = '';
   }
-  feed.addEventListener('click', function () { input.focus(); });
+  // open explicitly instead of relying on the focus event: some Chromium setups focus the input (you can type) without ever firing 'focus'
+  function openChat() { setOpen(true); if (document.activeElement !== input) input.focus(); }
+  feed.addEventListener('click', openChat);
   // scrolling over the recent lines or the bar itself opens the history (the lines fade, so the bar must work too)
-  [feed, input].forEach(function (el) { el.addEventListener('wheel', function () { if (!open) input.focus(); }, { passive: true }); });
-  input.addEventListener('focus', function () { setOpen(true); }); // clicking/tapping the bar opens it; we never focus it ourselves except on T or /
+  [feed, input].forEach(function (el) { el.addEventListener('wheel', function () { if (!open) openChat(); }, { passive: true }); });
+  input.addEventListener('focus', function () { setOpen(true); }); // tabbing into the bar, where the browser does fire it
+  input.addEventListener('click', function () { if (!open) openChat(); });
   input.addEventListener('keydown', function (e) {
     e.stopPropagation(); // typing must never trigger table shortcuts (space = take pile, enter = throw)
     if (e.key === 'Enter') { e.preventDefault(); submit(); setOpen(false); } // hand the keyboard back to the table
     else if (e.key === 'Escape') setOpen(false);
+    else if (!open) setOpen(true); // typing into a focused-but-closed bar
   });
   addEventListener('pointerdown', function (e) { if (open && !box.contains(e.target)) setOpen(false); });
   addEventListener('keydown', function (e) { // "T" or "/" opens chat, like most games
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
     if (!document.body.classList.contains('inroom') || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 't' || e.key === 'T' || e.key === '/') { e.preventDefault(); input.focus(); }
+    if (e.key === 't' || e.key === 'T' || e.key === '/') { e.preventDefault(); openChat(); }
   });
 
   window.Chat = { add: add, history: history, close: function () { setOpen(false); } };

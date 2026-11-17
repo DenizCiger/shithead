@@ -33,7 +33,7 @@ interface Room {
 }
 interface ChatMsg { name: string; seat: number /* -1 = spectator */; text: string; t: number }
 const CHAT_KEEP = 50, CHAT_MAX = 200;
-const REACTIONS = ['🖕', '😂', '😡', '😭', '👍', '👏', '🔥', '💀', '🤡', '😈', '🙏', '🫡'];
+const REACTIONS = ['🖕', '😂', '😡', '😭', '👍', '👏', '🔥', '💀', '🤡', '😈', '🙏', '🫡', '🫀', '🍅'];
 const rooms = new Map<string, Room>();
 
 const genCode = () => {
