@@ -162,7 +162,7 @@
 #rules .ri b{flex:0 0 78px;color:var(--y);font:italic 900 19px/1.05 Impact,sans-serif;white-space:normal}
 #rules .ri span{flex:1 1 120px;min-width:0}
 #rules .ri em{flex:none;background:var(--m);color:#fff;font:italic 900 12px Impact,sans-serif;letter-spacing:1px;padding:0 6px 1px;transform:rotate(-3deg)}
-#rules .ri.bonus{border-left:5px solid var(--m);padding-left:8px;margin:4px 0;background:rgba(255,46,136,.08)}
+#rules .ri.bonus{margin:4px 0;padding-left:8px;background:rgba(255,46,136,.08)}
 #rules .ri.bonus b{color:var(--m)}
 #rules .rcol.off .ri{opacity:.75}
 #rules .rnone{font:italic 600 14px system-ui,sans-serif;color:#777;padding:6px 0}
