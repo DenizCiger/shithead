@@ -399,8 +399,7 @@ export function play(s: State, seat: number, ids: number[]): Result {
     const sixes = cards.filter((c) => c.rank === 6);
     const sevens = cards.filter((c) => c.rank === 7);
     playGroup(sixes);
-    if (burn) return { ok: false, error: 'Four 6s burn the pile — play the 7s next turn' };
-    playGroup(sevens);
+    playGroup(sevens); // if the 6s made four of a kind, the 7s ride along and burn with the pile
     addLog(n, `${name} plays ${sixes.length}×6 + ${sevens.length}×7.`);
   } else {
     playGroup(cards);

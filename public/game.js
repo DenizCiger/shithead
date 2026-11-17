@@ -253,17 +253,17 @@ function isHeld(key){return !!hold&&((hold.swap&&hold.sp.key===key)||(!!hold.ids
 function byId(id){return zoneCards().find(function(c){return c.id===id})}
 function okRank(c){return !dims()||view.playable.indexOf(c.rank)>=0}
 function selCards(){return sel.map(byId).filter(Boolean)}
-// same rank, or 6s together with 7s (never all four 6s plus a 7: the engine refuses that)
+// same rank, or 6s together with 7s
 function canJoin(c,cur){
   var all=cur.concat([c]),rs=[];all.forEach(function(x){if(rs.indexOf(x.rank)<0)rs.push(x.rank)});
   if(rs.length===1)return true;
-  if(R().combo&&rs.length===2&&rs.indexOf(6)>=0&&rs.indexOf(7)>=0)return all.filter(function(x){return x.rank===6}).length<4;
+  if(R().combo&&rs.length===2&&rs.indexOf(6)>=0&&rs.indexOf(7)>=0)return true;
   return false;
 }
 function raise(c){var cur=selCards();if(cur.length&&!canJoin(c,cur))cur=[];sel=cur.concat([c]).map(function(x){return x.id})}
 function raiseRank(c){
   var cs=zoneCards().filter(function(x){return x.rank===c.rank});sel=cs.map(function(x){return x.id});
-  if(R().combo&&(c.rank===6||c.rank===7)){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});if(c.rank===6&&cs.length>=4)o=[];if(c.rank===7&&o.length>=4)o=[];sel=sel.concat(o.map(function(x){return x.id}))}
+  if(R().combo&&(c.rank===6||c.rank===7)){var o=zoneCards().filter(function(x){return x.rank===(c.rank===6?7:6)});sel=sel.concat(o.map(function(x){return x.id}))}
 }
 function lower(c){sel=sel.filter(function(id){return id!==c.id})}
 function stackTo(x,y,dur){hold.ids.forEach(function(id,i){var sp=sprites.get('c'+id);if(sp)put(sp,{x:x-i*12,y:y-i*12,r:-4+i*5,s:1.12,z:900-i},{dur:dur})});xn.style.transform='translate('+(x+56)+'px,'+(y-110)+'px)'}

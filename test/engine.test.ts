@@ -70,6 +70,11 @@ test('67 combo', () => {
   assert.equal(n.pile.length, 4);
   bad(E.play(s, 0, [s.players[0]!.hand[0]!.id, s.players[0]!.hand[3]!.id]));
 });
+test('67 where the 6s complete four of a kind: the whole throw burns and you go again', () => {
+  const s = mk([[C(6), C(6, 'S'), C(7), C(9)], [C(5)]], [C(6, 'D'), C(6, 'C')]);
+  const n = ok(E.play(s, 0, s.players[0]!.hand.slice(0, 3).map((c) => c.id)));
+  assert.equal(n.pile.length, 0); assert.equal(n.current, 0); assert.equal(n.burnedCount, 5);
+});
 test('cannot play: pickup passes turn', () => {
   const s = mk([[C(5)], [C(4)]], [C(9)]);
   const n = ok(E.pickup(s, 0));
