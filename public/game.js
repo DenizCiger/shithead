@@ -415,7 +415,11 @@ var A={
     setCount(0);await wait(820);
     stamp(isMe(ev.seat)?'GO AGAIN!':view.players[ev.seat].name.toUpperCase()+' GOES AGAIN',640,440,{size:44,dur:800,r:-3});await wait(300);
   },
-  pickup:async function(ev){if(ev.penalty){stamp('MISPLAY! TAKE IT',640,250,{fg:'#fff',bg:'#ff2e88',size:60,dur:900});sfx.block();trauma=Math.min(1,trauma+.4);await wait(300)}await eat(ev.seat,ev.count)},
+  pickup:async function(ev){
+    if(ev.penalty){stamp('MISPLAY! TAKE IT',640,250,{fg:'#fff',bg:'#ff2e88',size:60,dur:900});sfx.block();trauma=Math.min(1,trauma+.4);await wait(300)}
+    if(ev.penalty&&ev.shot){await drinkShot(ev.seat);if(isMe(ev.seat))wonky()}
+    await eat(ev.seat,ev.count);
+  },
   flipfail:async function(ev){
     var mine=isMe(ev.seat),o=takeDown(ev.seat,mine?lastDownK:view.players[ev.seat].downCount-1)||posOf(ev.seat);
     var sp=mk('c'+ev.card.id,ev.card,o.x,o.y,{s:mine?1:.5,z:800});sp.role='pile';
@@ -435,9 +439,9 @@ var A={
   skip:async function(ev){sfx.eight(ev.seat);stamp(ev.n>1?'SKIP x'+ev.n+'!':'SKIP!',PILE.x+190,PILE.y-135,{size:60,dur:800,r:6,fg:'#ff7a1a'});await wait(420)},
   draw:async function(ev){sfx.draw(ev&&ev.seat)},
   out:async function(ev){var me=isMe(ev.seat),p=posOf(ev.seat);stamp(me?'YOU ARE OUT!':'OUT!',me?640:p.x,me?560:p.y,{size:me?90:60,dur:1200,fg:'#000',bg:COL[ev.seat%6]});sfx.out(me,ev.seat);spark(me?640:p.x,me?560:p.y,24,['#fff',COL[ev.seat%6]],22);await wait(600)},
-  turn:async function(ev){if(isMe(ev.seat)&&!view.pendingJoker&&view.players[view.you].active){sfx.turn();stamp('YOUR HIT',640,520,{size:40,dur:600,fg:'#000',bg:'#ffe600',r:-3})}},
+  turn:async function(ev){drunkTurn(ev.seat);if(isMe(ev.seat)&&!view.pendingJoker&&view.players[view.you].active){sfx.turn();stamp('YOUR HIT',640,520,{size:40,dur:600,fg:'#000',bg:'#ffe600',r:-3})}},
   end:async function(ev){
-    await wait(400);var v=view,lost=isMe(ev.shithead);
+    sober();await wait(400);var v=view,lost=isMe(ev.shithead);
     if(lost)sfx.lose();else sfx.win();await hitstop(350,true);trauma=1;
     $('#over').style.setProperty('--oc',lost?'#ff2e88':'#ffe600');$('#oh').textContent=lost?'SHITHEAD':'SURVIVED';
     $('#os').textContent=lost?'LAST ONE HOLDING CARDS. THAT IS YOU.':v.players[ev.shithead].name.toUpperCase()+' IS THE SHITHEAD';
@@ -446,6 +450,20 @@ var A={
     $('#again').textContent=v.host?'REMATCH':'WAITING FOR HOST';$('#again').disabled=!v.host;$('#tolobby').style.display=v.host?'':'none';$('#over').classList.add('on');
   }
 };
+// fake shot glass at the player's seat: pops in, tips back and empties
+async function drinkShot(seat){
+  var me=isMe(seat),p=posOf(seat),x=me?640:p.x,y=me?440:p.y+(p.y<100?110:-90),d=1400/S.speed;
+  var e=document.createElement('div');e.className='shot';e.style.transform='translate('+x+'px,'+y+'px)';e.style.setProperty('--d',d+'ms');
+  e.innerHTML='<div class="glass"><i></i></div>';fxL.appendChild(e);
+  stamp(me?'DRINK UP!':'SHOT!',x+(me?150:0),y-(me?40:70),{size:me?54:36,dur:1100,fg:'#000',bg:'#ffb000',r:5});
+  await wait(1400);e.remove();
+}
+// after the shot the misplayer's table stays blurry until their next turn is over
+// drunk: 0 = sober, 1 = waiting for their next turn, 2 = in that turn
+var drunk=0;
+function wonky(){drunk=1;stage.classList.add('wonky');$('#booze').classList.add('on')}
+function sober(){drunk=0;stage.classList.remove('wonky');$('#booze').classList.remove('on')}
+function drunkTurn(seat){if(drunk===1&&isMe(seat))drunk=2;else if(drunk===2&&!isMe(seat))sober()}
 async function eat(seat,count){
   var me=isMe(seat),p=posOf(seat),ps=[];sprites.forEach(function(sp){if(sp.role==='pile'||sp.role==='fly')ps.push(sp)});
   sfx.take(seat);await hitstop(90,false);trauma=Math.min(1,trauma+.6);flash(COL[seat%6],.3,300);
@@ -489,7 +507,7 @@ var queue=Promise.resolve();
 window.Game={
   push:function(v,events){queue=queue.then(function(){return sim.onState(v,events)}).catch(function(e){console.error(e)})},
   error:function(msg){sim.onError(msg)},
-  reset:function(){queue=Promise.resolve();clearAll();view=null;lastCount=-1;maxDeck=0;$('#over').classList.remove('on');$('#parry').style.display='none';hold=null;sel=[];busy=false},
+  reset:function(){queue=Promise.resolve();clearAll();sober();view=null;lastCount=-1;maxDeck=0;$('#over').classList.remove('on');$('#parry').style.display='none';hold=null;sel=[];busy=false},
   view:function(){return view},
   show:function(on){$('#fit').style.display=on?'block':'none'}
 };

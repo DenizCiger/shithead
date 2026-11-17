@@ -23,6 +23,7 @@
     { v: 'normal', l: 'NORMAL', desc: 'Nothing is dimmed. Illegal throws are simply blocked.' },
     { v: 'expert', l: 'EXPERT', desc: 'An illegal throw takes the whole pile as a penalty.' }
   ];
+  var SHOT = { short: '🥃 SHOT ON MISPLAY', desc: 'Expert only: a punished misplay also costs a (fake) shot. Expect a wobbly table.' };
   var CLASSIC = { jokers: true, parry: false, r3: false, r4: false, r8: false, r10: true, four: true, combo: false, randomJoker: false };
   var AHIF = { jokers: true, parry: true, r3: true, r4: true, r8: true, r10: true, four: true, combo: true, randomJoker: false };
   var PRESETS = { classic: { name: 'CLASSIC', rules: CLASSIC }, ahif: { name: 'AHIF', rules: AHIF } };
@@ -75,6 +76,7 @@
       var d = DIFF.filter(function (x) { return x.v === rules.difficulty; })[0];
       var note = el('p', 'rl');
       note.append(el('b', '', d.l + ': '), d.desc);
+      if (rules.shot) note.append(' ' + SHOT.desc.replace('Expert only: a', 'A'));
       box.append(note);
     }
     var row = el('div', 'srow'), btn = el('button', 'bigbtn', 'CLOSE');
@@ -84,5 +86,5 @@
     document.getElementById('rules').classList.add('open');
   }
 
-  window.RulesUI = { META: META, ASSIST: ASSIST, DIFF: DIFF, PRESETS: PRESETS, presetOf: presetOf, open: open };
+  window.RulesUI = { META: META, ASSIST: ASSIST, DIFF: DIFF, SHOT: SHOT, PRESETS: PRESETS, presetOf: presetOf, open: open };
 })();
