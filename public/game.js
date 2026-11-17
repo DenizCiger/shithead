@@ -128,6 +128,12 @@ function put(sp,t,o){
 }
 function kill(sp,fade){sprites.delete(sp.key);if(fade){sp.el.classList.add('gone');setTimeout(function(){sp.el.remove()},260)}else sp.el.remove()}
 function clearAll(){maxDeck=0;sprites.forEach(function(sp){sp.el.remove()});sprites.clear();swapSel=null;busy=false}
+// take a face-down sprite out and close the gap, so keys stay d<seat>_0..n-1 (you may flip any of yours, not just the last)
+function takeDown(seat,idx){
+  var sp=sprites.get('d'+seat+'_'+idx);if(!sp)return null;var o={x:sp.x,y:sp.y};kill(sp);
+  for(var j=idx+1;sprites.has('d'+seat+'_'+j);j++){var q=sprites.get('d'+seat+'_'+j);sprites.delete(q.key);q.key='d'+seat+'_'+(j-1);sprites.set(q.key,q)}
+  return o;
+}
 function posOf(seat){if(seat===view.you)return{x:HAND.x,y:HAND.y};return OPP[oppSeats.indexOf(seat)]}
 // a spectator watches from a seat's side of the table but is never that player
 function isMe(seat){return !view.spectator&&seat===view.you}
@@ -165,7 +171,7 @@ function layout(o){
     if(me){
       var big=v.phase==='playing'&&v.zone!=='hand'&&v.zone!==null,act=myTurn()||v.phase==='swap',sw=v.phase==='swap';
       for(k=0;k<p.downCount;k++){
-        var d=T('d0_'+k,null,sw?{x:RESX+(k-(p.downCount-1)/2)*118,y:HAND.y-22,s:1,r:-4,z:150+k,up:false}:big?{x:HAND.x+(k-(p.downCount-1)/2)*118,y:HAND.y+(p.up.length?16:0),s:1,r:-4,z:150+k,up:false}:{x:RES.x+k*54,y:RES.y+6,s:.5,r:-4,z:150+k,up:false},'down',k);
+        var d=T('d'+p.seat+'_'+k,null,sw?{x:RESX+(k-(p.downCount-1)/2)*118,y:HAND.y-22,s:1,r:-4,z:150+k,up:false}:big?{x:HAND.x+(k-(p.downCount-1)/2)*118,y:HAND.y+(p.up.length?16:0),s:1,r:-4,z:150+k,up:false}:{x:RES.x+k*54,y:RES.y+6,s:.5,r:-4,z:150+k,up:false},'down',k);
         if(big&&!p.up.length)d.el.classList.add('live');
       }
       p.up.forEach(function(c,k){
@@ -388,7 +394,7 @@ var A={
     for(var i=0;i<n;i++){
       var c=ev.cards[i],sp=sprites.get('c'+c.id);
       if(!sp){
-        var o=src;if(!mine&&!ev.blind){var fk=-1,fs=null;sprites.forEach(function(q){if(q.key.indexOf('h'+ev.seat+'_')===0&&q.k>fk){fk=q.k;fs=q}});if(fs){o={x:fs.x,y:fs.y};kill(fs)}}if(ev.blind){var ds=sprites.get('d'+ev.seat+'_'+(mine?lastDownK:view.players[ev.seat].downCount-1));if(ds){o={x:ds.x,y:ds.y};kill(ds)}}
+        var o=src;if(!mine&&!ev.blind){var fk=-1,fs=null;sprites.forEach(function(q){if(q.key.indexOf('h'+ev.seat+'_')===0&&q.k>fk){fk=q.k;fs=q}});if(fs){o={x:fs.x,y:fs.y};kill(fs)}}if(ev.blind){var dp=takeDown(ev.seat,mine?lastDownK:view.players[ev.seat].downCount-1);if(dp)o=dp}
         sp=mk('c'+c.id,c,o.x,o.y,{s:mine?1:.5,z:800});
       }
       if(sp.role!=='fly'||ev.blind){
@@ -411,8 +417,8 @@ var A={
   },
   pickup:async function(ev){if(ev.penalty){stamp('MISPLAY! TAKE IT',640,250,{fg:'#fff',bg:'#ff2e88',size:60,dur:900});sfx.block();trauma=Math.min(1,trauma+.4);await wait(300)}await eat(ev.seat,ev.count)},
   flipfail:async function(ev){
-    var mine=isMe(ev.seat),ds=sprites.get('d'+ev.seat+'_'+(mine?lastDownK:view.players[ev.seat].downCount-1)),o=ds?{x:ds.x,y:ds.y}:posOf(ev.seat);
-    if(ds)kill(ds);var sp=mk('c'+ev.card.id,ev.card,o.x,o.y,{s:mine?1:.5,z:800});sp.role='pile';
+    var mine=isMe(ev.seat),o=takeDown(ev.seat,mine?lastDownK:view.players[ev.seat].downCount-1)||posOf(ev.seat);
+    var sp=mk('c'+ev.card.id,ev.card,o.x,o.y,{s:mine?1:.5,z:800});sp.role='pile';
     sfx.whoosh();put(sp,{x:PILE.x+30,y:PILE.y+20,r:372,s:1.3,up:true},{dur:520,ease:'cubic-bezier(.3,0,.6,1)'});await wait(520);
     sfx.block();spark(PILE.x,PILE.y,16,['#fff','#ff2e88'],20);await hitstop(160,true);trauma=.8;
     stamp('BLOCKED!',640,250,{fg:'#fff',bg:'#ff2e88',size:90,dur:800});await wait(500);busy=false;
