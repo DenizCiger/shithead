@@ -41,12 +41,16 @@
   <div class="srow"><label>VOLUME</label><input type="range" id="vol" min="0" max="100"><span id="volv"></span></div>
   <div class="srow"><button class="bigbtn" id="sclose">CLOSE</button> <button class="bigbtn sec" id="sleave">LEAVE ROOM</button></div>
 </div></div>
+<button id="chatbtn" title="Chat (T)" aria-label="Chat">&#128172;<i id="chatbadge"></i></button>
+<div id="chatfeed"></div>
+<div id="chat"><div class="chh"><span>CHAT</span><button id="chatx" aria-label="Close chat">&times;</button></div><div id="chatlog"></div><input id="chatin" maxlength="200" placeholder="Say something... (Enter to send)" autocomplete="off" aria-label="Chat message"></div>
 <div id="rules"><div class="sbox"></div></div>
 <div id="modal"></div>
 <div id="toast"></div>
 <div id="conn">RECONNECTING…</div>
 <script src="sfx.js"></script>
 <script src="rules.js"></script>
+<script src="chat.js"></script>
 <script src="game.js"></script>
 <script src="net.js"></script>
 </body>

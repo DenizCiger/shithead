@@ -29,7 +29,10 @@ interface Room {
   lastActive: number;
   botTimer?: NodeJS.Timeout;
   speed: number; // host-set game speed multiplier; shortens the bots' thinking time
+  chat: ChatMsg[]; // recent in-room chat, replayed to whoever (re)joins
 }
+interface ChatMsg { name: string; seat: number /* -1 = spectator */; text: string; t: number }
+const CHAT_KEEP = 50, CHAT_MAX = 200;
 const rooms = new Map<string, Room>();
 
 const genCode = () => {
@@ -52,6 +55,7 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 
+const chatTimes = new Map<string, number[]>(); // per-member send times, for the rate limit
 const wss = new WebSocketServer({ server, maxPayload: 4096 });
 
 const send = (ws: WebSocket | null, msg: unknown) => {
@@ -222,7 +226,7 @@ function handle(ws: WebSocket, msg: any) {
     case 'create': {
       const code = genCode();
       const token = randomBytes(12).toString('hex');
-      const room: Room = { code, speed: 1, settings: { maxPlayers: E.MAX_PLAYERS, decks: 0, rules: { ...E.AHIF }, assist: { autoTake: false, autoOne: false, autoStack: false } }, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
+      const room: Room = { code, speed: 1, chat: [], settings: { maxPlayers: E.MAX_PLAYERS, decks: 0, rules: { ...E.AHIF }, assist: { autoTake: false, autoOne: false, autoStack: false } }, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
       if (msg.spectate) {
         const sp: Spec = { name: cleanName(msg.name), token, ws, cam: 0 };
         room.specs.push(sp); conn.spec = sp;
@@ -244,6 +248,7 @@ function handle(ws: WebSocket, msg: any) {
         s.ws = ws;
         conn.room = room; conn.seat = si >= 0 ? si : undefined; conn.spec = sj >= 0 ? room.specs[sj] : undefined;
         send(ws, { type: 'joined', code: room.code, token: s.token, seat: si });
+        send(ws, { type: 'chathist', log: room.chat });
         return broadcast(room);
       }
       const token = randomBytes(12).toString('hex');
@@ -253,6 +258,7 @@ function handle(ws: WebSocket, msg: any) {
         room.specs.push(sp);
         conn.room = room; conn.spec = sp; conn.seat = undefined;
         send(ws, { type: 'joined', code: room.code, token, seat: -1 });
+        send(ws, { type: 'chathist', log: room.chat });
         return broadcast(room);
       }
       if (room.game) return err('Game already started: you can join as a spectator');
@@ -260,6 +266,7 @@ function handle(ws: WebSocket, msg: any) {
       room.seats.push({ name: cleanName(msg.name), token, ws });
       conn.room = room; conn.seat = room.seats.length - 1; conn.spec = undefined;
       send(ws, { type: 'joined', code: room.code, token, seat: conn.seat });
+      send(ws, { type: 'chathist', log: room.chat });
       return broadcast(room);
     }
   }
@@ -274,6 +281,18 @@ function handle(ws: WebSocket, msg: any) {
     room.seats.forEach((s, i) => { if (s.ws) conns.get(s.ws)!.seat = i; });
   };
 
+  if (msg.type === 'chat') { // everyone in the room, spectators included
+    const text = String(msg.text ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
+    if (!text) return;
+    const now = Date.now(), recent = (chatTimes.get(myToken) ?? []).filter((t) => now - t < 5000);
+    if (recent.length >= 5) return err('Slow down: too many messages');
+    chatTimes.set(myToken, [...recent, now]);
+    const m: ChatMsg = { name: spec ? spec.name : room.seats[seat!]!.name, seat: spec ? -1 : seat!, text, t: now };
+    room.chat.push(m);
+    if (room.chat.length > CHAT_KEEP) room.chat.shift();
+    for (const x of [...room.seats, ...room.specs]) send(x.ws, { type: 'chat', msg: m });
+    return;
+  }
   if (msg.type === 'speed') { // host only: how fast bots play (clients scale their own animations)
     if (!isHost) return;
     room.speed = [1, 2, 4, 8].includes(Number(msg.v)) ? Number(msg.v) : 1;
@@ -285,7 +304,7 @@ function handle(ws: WebSocket, msg: any) {
     return send(ws, view(room, { spec }));
   }
   if (spec) {
-    const allowed = ['start', 'lobby', 'kick', 'addbot', 'rmbot', 'settings', 'crown', 'move', 'leave', 'sit'];
+    const allowed = ['start', 'lobby', 'kick', 'addbot', 'rmbot', 'settings', 'crown', 'move', 'leave', 'sit', 'chat'];
     if (!allowed.includes(msg.type)) return err('Spectators cannot play');
   }
   const free = (ws: WebSocket | null) => { if (ws) conns.set(ws, {}); };

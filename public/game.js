@@ -141,7 +141,7 @@ function at2(e,t,x,y){e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';e.s
 function swapLabels(v){
   var L=[$('#lbl1'),$('#lbl2'),$('#lbl3')];L.forEach(function(e){e.style.display='none'});
   if(v.spectator){at2(L[0],v.players[v.you].name.toUpperCase(),HAND.x,HAND.y+82);return}
-  if(v.phase!=='swap'||v.players[v.you].ready)return;
+  if(v.phase!=='swap')return; // stays up after READY, while the others finish their loadout
   function at(e,t,x,y){e.textContent=t;e.style.left=x+'px';e.style.top=y+'px';e.style.display='block'}
   at(L[0],'YOUR HAND',HANDX,HAND.y+82);at(L[1],'YOUR RESERVE',RESX,HAND.y+82);
 }
@@ -185,7 +185,7 @@ function layout(o){
     }else{
       var sl=oppSeats.indexOf(p.seat),P=cam?{x:HAND.x,y:HAND.y-20}:OPP[sl],rp=cam?{x:RES.x,y:RES.y}:resPos(P),bx=rp.x,by=rp.y,hs_=cam?.8:.5;
       var hn2=p.handCount,fcx=P.x,fcy=P.y+(cam?0:52),st=Math.min(cam?46:24,(cam?420:190)/Math.max(1,hn2-1)),ang=Math.min(5,60/Math.max(1,hn2-1)),half=(hn2-1)/2,arc=Math.min(.9,30/Math.max(1,half*half));
-      for(k=0;k<hn2;k++){var o=k-half;var hs=T('h'+p.seat+'_'+k,null,{x:fcx+o*st,y:fcy+o*o*arc,r:o*ang,s:hs_,z:10+k,up:false},'opp',k);hs.el.style.setProperty('--pc',COL[p.seat%6])}
+      for(k=0;k<hn2;k++){var dx=k-half;var hs=T('h'+p.seat+'_'+k,null,{x:fcx+dx*st,y:fcy+dx*dx*arc,r:dx*ang,s:hs_,z:10+k,up:false},'opp',k);hs.el.style.setProperty('--pc',COL[p.seat%6])}
       for(k=0;k<p.downCount;k++)T('d'+p.seat+'_'+k,null,{x:bx+k*(cam?54:44),y:by+6,s:cam?.5:.4,r:-4,z:20+k,up:false},'opp');
       p.up.forEach(function(c,k){T('c'+c.id,c,{x:bx+k*(cam?54:44),y:by-4,s:cam?.5:.4,r:-4,z:30+k,up:true},'opp')});
     }
@@ -331,6 +331,7 @@ function nope(sp,msg){sfx.block();trauma=Math.min(1,trauma+.3);stamp(msg,640,520
 $('#take').addEventListener('click',function(){if(view.phase==='playing'&&!busy)sim.send({type:'pickup'})});
 $('#ready').addEventListener('click',function(){sim.send({type:'ready'})});
 addEventListener('keydown',function(e){
+  if(e.target&&e.target.tagName==='INPUT')return;
   if(!view||$('#fit').style.display==='none'||$('#settings').classList.contains('open'))return;
   var pj=view.pendingJoker;
   if(pj&&!view.spectator&&pj.parry&&pj.parry.to===view.you){if(e.key===' '||e.key==='e'){e.preventDefault();$('#eatbtn').click()}else if((e.key==='p'||e.key==='Enter')&&view.parryId!=null)$('#parrybtn').click();return}

@@ -36,12 +36,14 @@
       } else if (m.type === 'error') {
         if (st && st.phase !== 'lobby' && session) window.Game.error(m.msg); else toast(m.msg);
         if (m.msg === 'Room not found' && session) forget();
+      } else if (m.type === 'chat') { window.Chat.add(m.msg);
+      } else if (m.type === 'chathist') { window.Chat.history(m.log);
       } else if (m.type === 'kicked') { forget(); toast('You were removed from the room');
       } else if (m.type === 'closed') { forget(); toast('The room was closed');
       } else if (m.type === 'left') { forget(); }
     };
   }
-  function forget() { session = null; st = null; modal = null; localStorage.removeItem('shithead'); window.Game.reset(); render(); }
+  function forget() { window.Chat.history([]); window.Chat.close(); session = null; st = null; modal = null; localStorage.removeItem('shithead'); window.Game.reset(); render(); }
 
   function h(tag, attrs) {
     var el = document.createElement(tag);

@@ -163,3 +163,29 @@ test('spectator host with six bots: game runs to the end', async () => {
   const end = await h.until((s) => s.phase === 'finished', 60000);
   assert.ok(end.shithead !== null);
 });
+
+test('chat: reaches players and spectators, is cleaned, rate limited, and replayed to a rejoiner', async () => {
+  const { h, code } = await room('Host');
+  const g = await joined(code, 'Guest');
+  const w = await joined(code, 'Watcher', true);
+  const chats = (c: Client) => c.inbox.filter((m) => m.type === 'chat').map((m) => m.msg);
+  const until = async (fn: () => boolean) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 10)); assert.ok(fn()); };
+  g.send({ type: 'chat', text: '  hello   <b>there</b>  ' });
+  await until(() => [h, g, w].every((c) => chats(c).length === 1));
+  assert.equal(chats(w)[0].text, 'hello <b>there</b>');
+  assert.equal(chats(h)[0].name, 'Guest');
+  assert.equal(chats(w)[0].seat, 1);
+  w.send({ type: 'chat', text: 'x'.repeat(500) });
+  await until(() => chats(h).length === 2);
+  assert.equal(chats(h)[1].text.length, 200);
+  assert.equal(chats(h)[1].seat, -1); // spectator
+  g.send({ type: 'chat', text: '   ' }); // empty: ignored
+  for (let i = 0; i < 6; i++) h.send({ type: 'chat', text: 'spam ' + i });
+  assert.match((await h.nextError())!, /Slow down/);
+  assert.equal(chats(h).filter((m) => m.text.startsWith('spam')).length, 5);
+  const tok = h.inbox.find((m) => m.type === 'joined')!.token;
+  const h2 = await connect();
+  h2.send({ type: 'join', code, token: tok, name: 'Host' });
+  await until(() => h2.inbox.some((m) => m.type === 'chathist'));
+  assert.equal(h2.inbox.find((m) => m.type === 'chathist')!.log.length, 7);
+});
