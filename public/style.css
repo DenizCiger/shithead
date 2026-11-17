@@ -185,3 +185,5 @@ body.inroom #chatbtn{display:block}
 #chatin:focus{border-top-color:var(--y)}
 #chatfeed{position:fixed;left:14px;bottom:14px;z-index:150;width:min(320px,70vw);pointer-events:none;font:600 14px/1.3 system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000}
 #chatfeed .cm{background:rgba(0,0,0,.65);padding:3px 8px;border-left:4px solid var(--y)}
+
+#deckn{position:absolute;left:885px;top:222px;width:80px;margin-left:-40px;text-align:center;font-size:34px;line-height:1;color:#fff;-webkit-text-stroke:2px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #000;z-index:2;pointer-events:none}

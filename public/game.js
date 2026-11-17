@@ -222,7 +222,7 @@ function setCount(n){var e=$('#count');if(n===lastCount)return;lastCount=n;e.tex
   e.style.webkitTextStroke='5px '+(h<.35?'#ffffff':h<.7?'#ffe600':'#ff2e88');e.classList.remove('p');void e.offsetWidth;e.classList.add('p')}
 function hud(){
   var v=view,mt=myTurn(),me=v.players[v.you];
-  setCount(v.pileCount);
+  setCount(v.pileCount);$('#deckn').textContent=v.deckCount>0?v.deckCount:'';
   var pj=v.pendingJoker,choosing=!!(pj&&!v.spectator&&!v.rules.randomJoker&&!pj.parry&&pj.by===v.you),deciding=!!(pj&&!v.spectator&&pj.parry&&pj.parry.to===v.you);
   $('#rule span').textContent=v.phase==='swap'?'LOADOUT: SWAP HAND AND RESERVE':pj?(pj.parry?(deciding?'PARRY IT OR EAT IT':v.players[pj.parry.to].name.toUpperCase()+' MAY PARRY...'):choosing?'PICK YOUR VICTIM':(pj.by===v.you&&v.rules.randomJoker?'RANDOM VICTIM...':'JOKER...')):shortRule(v.restriction);
   $('#parry').style.display=deciding?'block':'none';$('#parrybtn').style.display=v.parryId!=null?'':'none';
