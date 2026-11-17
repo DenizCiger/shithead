@@ -3,8 +3,8 @@
   'use strict';
   var $ = function (s) { return document.querySelector(s); };
   var COL = ['#ffe600', '#ff2e88', '#19e3ff', '#ff7a1a', '#7dff3a', '#b266ff'];
-  var box = $('#chat'), log = $('#chatlog'), input = $('#chatin'), btn = $('#chatbtn'), badge = $('#chatbadge'), feed = $('#chatfeed');
-  var unread = 0, open = false;
+  var box = $('#chat'), log = $('#chatlog'), input = $('#chatin'), feed = $('#chatfeed');
+  var open = false;
 
   function line(m) {
     var d = document.createElement('div'); d.className = 'cm';
@@ -14,36 +14,41 @@
     d.append(n, t); return d;
   }
   function trim(el, n) { while (el.children.length > n) el.firstChild.remove(); }
+  // Docked bottom-left. Collapsed: fading recent lines over a slim input bar. Open: the scrollable log above the bar.
   function setOpen(on) {
-    open = on; box.classList.toggle('open', on); feed.style.display = on ? 'none' : '';
-    if (on) { unread = 0; badge.style.display = 'none'; log.scrollTop = log.scrollHeight; setTimeout(function () { input.focus(); }, 0); }
-    else input.blur();
+    open = on; box.classList.toggle('open', on);
+    if (on) log.scrollTop = log.scrollHeight; // the floating lines just hide while open and carry on expiring, so they're still there if you close quickly
+    else if (document.activeElement === input) input.blur();
   }
   function add(m) {
-    log.appendChild(line(m)); trim(log, 80); log.scrollTop = log.scrollHeight;
+    var stick = log.scrollHeight - log.scrollTop - log.clientHeight < 40; // don't yank the view while someone reads back
+    log.appendChild(line(m)); trim(log, 200); if (stick) log.scrollTop = log.scrollHeight;
     if (open) return;
-    unread++; badge.textContent = unread > 9 ? '9+' : unread; badge.style.display = 'block';
-    var f = line(m); feed.appendChild(f); trim(feed, 3);
-    setTimeout(function () { f.remove(); }, 7000);
+    var f = line(m); feed.appendChild(f); trim(feed, 4);
+    setTimeout(function () { f.remove(); }, 9000);
   }
-  function history(list) { log.innerHTML = ''; feed.innerHTML = ''; unread = 0; badge.style.display = 'none'; (list || []).forEach(function (m) { log.appendChild(line(m)); }); log.scrollTop = log.scrollHeight; }
+  function history(list) { log.innerHTML = ''; feed.innerHTML = ''; (list || []).forEach(function (m) { log.appendChild(line(m)); }); log.scrollTop = log.scrollHeight; }
   function submit() {
     var v = input.value.trim(); if (!v) return;
     if (window.Net) Net.send({ type: 'chat', text: v });
     input.value = '';
   }
-  btn.addEventListener('click', function () { setOpen(!open); });
-  $('#chatx').addEventListener('click', function () { setOpen(false); });
+  feed.addEventListener('click', function () { input.focus(); });
+  // scrolling over the recent lines or the bar itself opens the history (the lines fade, so the bar must work too)
+  [feed, input].forEach(function (el) { el.addEventListener('wheel', function () { if (!open) input.focus(); }, { passive: true }); });
+  input.addEventListener('focus', function () { setOpen(true); }); // clicking/tapping the bar opens it; we never focus it ourselves except on T or /
   input.addEventListener('keydown', function (e) {
     e.stopPropagation(); // typing must never trigger table shortcuts (space = take pile, enter = throw)
-    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    if (e.key === 'Enter') { e.preventDefault(); submit(); setOpen(false); } // hand the keyboard back to the table
     else if (e.key === 'Escape') setOpen(false);
   });
+  addEventListener('pointerdown', function (e) { if (open && !box.contains(e.target)) setOpen(false); });
   addEventListener('keydown', function (e) { // "T" or "/" opens chat, like most games
     var a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return;
     if (!document.body.classList.contains('inroom') || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === 't' || e.key === 'T' || e.key === '/') { e.preventDefault(); setOpen(true); }
+    if (e.key === 't' || e.key === 'T' || e.key === '/') { e.preventDefault(); input.focus(); }
   });
+
   window.Chat = { add: add, history: history, close: function () { setOpen(false); } };
 })();

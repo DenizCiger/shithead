@@ -33,6 +33,7 @@ interface Room {
 }
 interface ChatMsg { name: string; seat: number /* -1 = spectator */; text: string; t: number }
 const CHAT_KEEP = 50, CHAT_MAX = 200;
+const REACTIONS = ['🖕', '😂', '😡', '😭', '👍', '👏', '🔥', '💀', '🤡', '😈', '🙏', '🫡'];
 const rooms = new Map<string, Room>();
 
 const genCode = () => {
@@ -291,6 +292,23 @@ function handle(ws: WebSocket, msg: any) {
     room.chat.push(m);
     if (room.chat.length > CHAT_KEEP) room.chat.shift();
     for (const x of [...room.seats, ...room.specs]) send(x.ws, { type: 'chat', msg: m });
+    return;
+  }
+  if (msg.type === 'react') { // quick emoji, optionally aimed at one seat; not stored, just shown
+    if (spec) return err('Spectators cannot react');
+    const emoji = String(msg.emoji ?? '');
+    if (!REACTIONS.includes(emoji)) return;
+    const now = Date.now(), recent = (chatTimes.get(myToken) ?? []).filter((t) => now - t < 5000);
+    if (recent.length >= 5) return err('Slow down: too many messages');
+    chatTimes.set(myToken, [...recent, now]);
+    const ts = msg.to === undefined || msg.to === null ? -1 : Number(msg.to);
+    const target = Number.isInteger(ts) && ts !== seat ? room.seats[ts] : undefined;
+    const r = {
+      emoji,
+      from: { name: room.seats[seat!]!.name, seat: seat! },
+      to: target ? { name: target.name, seat: ts } : null,
+    };
+    for (const x of [...room.seats, ...room.specs]) send(x.ws, { type: 'react', ...r });
     return;
   }
   if (msg.type === 'speed') { // host only: how fast bots play (clients scale their own animations)

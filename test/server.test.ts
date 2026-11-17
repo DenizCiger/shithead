@@ -189,3 +189,25 @@ test('chat: reaches players and spectators, is cleaned, rate limited, and replay
   await until(() => h2.inbox.some((m) => m.type === 'chathist'));
   assert.equal(h2.inbox.find((m) => m.type === 'chathist')!.log.length, 7);
 });
+
+test('react: players reach everyone (spectators watch), spectators cannot send, junk is dropped', async () => {
+  const { h, code } = await room('Host');
+  const g = await joined(code, 'Guest');
+  const w = await joined(code, 'Watcher', true);
+  const rx = (c: Client) => c.inbox.filter((m) => m.type === 'react');
+  const until = async (fn: () => boolean) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 10)); assert.ok(fn()); };
+  g.send({ type: 'react', emoji: '🖕', to: 0 });
+  await until(() => [h, g, w].every((c) => rx(c).length === 1));
+  assert.deepEqual(rx(w)[0].from, { name: 'Guest', seat: 1 });
+  assert.deepEqual(rx(w)[0].to, { name: 'Host', seat: 0 });
+  w.send({ type: 'react', emoji: '😂' }); // spectators have chat, not reactions
+  assert.match((await w.nextError())!, /Spectators/);
+  g.send({ type: 'react', emoji: '😂', to: 1 }); // aimed at yourself = no target
+  await until(() => rx(h).length === 2);
+  assert.equal(rx(h)[1].to, null);
+  g.send({ type: 'react', emoji: '<script>' }); // not in the allowlist
+  g.send({ type: 'react', emoji: '👍', to: 99 });
+  await until(() => rx(h).length === 3);
+  assert.equal(rx(h)[2].emoji, '👍');
+  assert.equal(rx(h)[2].to, null);
+});

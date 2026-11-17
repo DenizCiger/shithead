@@ -169,21 +169,29 @@ body.dragging .card:hover .lift{transform:none}
 /* loadout: READY sits between the hand and the reserve */
 body.inswap #ready{position:absolute;right:auto;left:610px;top:-70px;translate:-50% -50%;font-size:32px;padding:6px 30px 8px;border-width:4px;box-shadow:7px 7px 0 #000}
 
-/* ---- chat */
-#chatbtn{display:none;position:fixed;right:118px;top:12px;z-index:200;width:44px;height:44px;border:3px solid #fff;background:#000;color:#fff;font:inherit;font-size:22px;line-height:1;cursor:pointer;transform:skewX(-10deg)}
-#chatbtn:hover{background:var(--y);color:#000}
-body.inroom #chatbtn{display:block}
-#chatbadge{display:none;position:absolute;right:-9px;top:-10px;min-width:20px;padding:0 4px;background:var(--m);color:#fff;border:2px solid #000;font:700 13px/18px system-ui,sans-serif;font-style:normal;text-align:center}
-#chat{display:none;position:fixed;right:14px;top:66px;z-index:250;width:min(340px,92vw);height:min(380px,60vh);flex-direction:column;background:#0b0b0d;border:4px solid var(--y);box-shadow:8px 8px 0 var(--m)}
-#chat.open{display:flex}
-#chat .chh{display:flex;justify-content:space-between;align-items:center;padding:4px 10px;background:var(--y);color:#000;font-size:22px}
-#chat .chh button{font:inherit;font-size:26px;line-height:1;background:none;border:0;cursor:pointer;color:#000}
-#chatlog{flex:1;overflow-y:auto;padding:8px 10px;font:600 14px/1.35 system-ui,sans-serif;color:#eee;word-break:break-word}
-#chatlog .cm,#chatfeed .cm{margin:2px 0}
+/* emoji must never inherit the body's italic/black display font: it synthesises a skew and smear */
+.rxbtn,.rxpick button,.rxfly span{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-style:normal;font-weight:400}
+/* ---- chat: docked bottom-right, left-aligned lines like most games; recent lines fade, the log scrolls */
+#chat{display:none;position:fixed;right:14px;bottom:14px;z-index:150;width:min(340px,70vw);flex-direction:column;pointer-events:none;font:600 14px/1.35 system-ui,sans-serif;font-style:normal;text-align:left;color:#fff}
+body.inroom #chat{display:flex}
+#chatfeed{display:flex;flex-direction:column;margin-bottom:4px;overflow:hidden;scrollbar-gutter:stable;scrollbar-width:thin;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:auto;cursor:pointer}
+#chat.open #chatfeed{display:none}
+/* feed lines and history lines share one look and one bottom edge, so opening the history changes nothing about where lines sit */
+#chatfeed .cm,#chatlog .cm{background:rgba(0,0,0,.6);padding:2px 8px;word-break:break-word}
+#chatlog{display:none;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;height:min(260px,40vh);margin-bottom:4px;background:rgba(0,0,0,.3);color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:auto;scrollbar-width:thin;scrollbar-color:#666 transparent}
+#chat.open #chatlog{display:flex;flex-direction:column}
+#chatlog>.cm:first-child{margin-top:auto} /* anchor to the bottom like Minecraft; older lines scroll up */
+#chatlog .cm:hover{background:rgba(40,40,46,.8)}
 #chatlog b,#chatfeed b{font-weight:800}
-#chatin{border:0;border-top:3px solid #333;background:#000;color:#fff;font:600 15px system-ui,sans-serif;padding:10px;outline:none}
-#chatin:focus{border-top-color:var(--y)}
-#chatfeed{position:fixed;left:14px;bottom:14px;z-index:150;width:min(320px,70vw);pointer-events:none;font:600 14px/1.3 system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000}
-#chatfeed .cm{background:rgba(0,0,0,.65);padding:3px 8px;border-left:4px solid var(--y)}
-
-#deckn{position:absolute;left:885px;top:222px;width:80px;margin-left:-40px;text-align:center;font-size:34px;line-height:1;color:#fff;-webkit-text-stroke:2px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #000;z-index:2;pointer-events:none}
+#chatin{pointer-events:auto;border:2px solid #444;background:rgba(0,0,0,.7);color:#fff;font:600 14px system-ui,sans-serif;padding:6px 10px;outline:none;width:100%;box-sizing:border-box}
+#chatin::placeholder{color:#888}
+#chat.open #chatin,#chatin:focus{border-color:var(--y);background:#000}
+body:not(.ingame) #chat{bottom:86px}
+/* ---- reactions: a badge on each opponent panel opens a small picker for that player */
+.rxbtn{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;padding:0;border:3px solid #fff;border-radius:50%;background:#000;font-size:18px;line-height:1;cursor:pointer;pointer-events:auto;display:flex;align-items:center;justify-content:center}
+.rxbtn:hover{background:var(--m);transform:scale(1.15)}
+.rxpick{position:absolute;width:284px;display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:6px;background:#0b0b0d;border:4px solid var(--m);box-shadow:6px 6px 0 var(--y);pointer-events:auto}
+.rxpick button{font-size:30px;line-height:1;padding:5px 0;background:#000;border:2px solid #333;cursor:pointer}
+.rxpick button:hover{border-color:var(--y);background:#1a1a1f}
+.rxfly{position:absolute;left:0;top:0;pointer-events:none;z-index:80;display:flex;flex-direction:column;align-items:center;margin:-38px 0 0 -70px;width:140px;opacity:0}
+.rxfly span{font-size:76px;line-height:1;filter:drop-shadow(0 6px 0 rgba(0,0,0,.55))}

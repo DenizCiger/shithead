@@ -37,6 +37,7 @@
         if (st && st.phase !== 'lobby' && session) window.Game.error(m.msg); else toast(m.msg);
         if (m.msg === 'Room not found' && session) forget();
       } else if (m.type === 'chat') { window.Chat.add(m.msg);
+      } else if (m.type === 'react') { window.Game.react(m);
       } else if (m.type === 'chathist') { window.Chat.history(m.log);
       } else if (m.type === 'kicked') { forget(); toast('You were removed from the room');
       } else if (m.type === 'closed') { forget(); toast('The room was closed');
@@ -225,6 +226,8 @@
     var inGame = !!(st && session && st.phase !== 'lobby');
     window.Game.show(inGame);
     document.body.classList.toggle('inroom', !!(st && session));
+    document.body.classList.toggle('ingame', inGame);
+    document.body.classList.toggle('spec', !!(st && st.spectator));
     if (inGame) {
       screen.classList.remove('on');
       window.Game.push(st, st.events || []);

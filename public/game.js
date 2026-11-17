@@ -78,6 +78,28 @@ function stamp(text,x,y,o){
   s.style.setProperty('--fg',o.fg||'#ffe600');s.style.setProperty('--bg',o.bg||'#000');s.style.setProperty('--r',(o.r===undefined?-6:o.r)+'deg');s.style.setProperty('--d',(o.dur||900)/S.speed+'ms');
   e.appendChild(s);fxL.appendChild(e);setTimeout(function(){e.remove()},(o.dur||900)/S.speed);
 }
+// emoji reaction: flies from the sender's seat to the target's (or floats up out of the sender's when aimed at all).
+// Plain DOM in the fx layer, never a sprite and never queued behind game events, so it can't be reconciled away or delay play.
+function react(m){
+  if(!view||!view.players||!m||!m.from)return;
+  var n=view.players.length,ok=function(q){return q!=null&&q>=0&&q<n&&posOf(q)};
+  if(!ok(m.from.seat))return;
+  var A=posOf(m.from.seat),B=m.to&&ok(m.to.seat)&&m.to.seat!==m.from.seat?posOf(m.to.seat):null;
+  var e=document.createElement('div');e.className='rxfly';
+  var g=document.createElement('span');g.textContent=m.emoji;
+  e.append(g);fxL.appendChild(e);
+  var kf=[],cl=function(v,lo,hi){return Math.max(lo,Math.min(hi,v))},T=function(x,y,sc,op,o){return{transform:'translate('+cl(x,70,W-70)+'px,'+cl(y,70,H-90)+'px) scale('+sc*.57+')',opacity:op,offset:o}}; // clamped so it never leaves the table
+  if(B){
+    var mx=(A.x+B.x)/2,my=(A.y+B.y)/2-140,N=10;
+    for(var i=0;i<=N;i++){var t=i/N,u=1-t;kf.push(T(u*u*A.x+2*u*t*mx+t*t*B.x,u*u*A.y+2*u*t*my+t*t*B.y,.5+1.3*t,i?1:0,t*.4))}
+    kf.push(T(B.x,B.y,2.1,1,.5));kf.push(T(B.x,B.y,2.3,1,.82));kf.push(T(B.x,B.y-30,2.3,0,1));
+  }else{
+    kf=[T(A.x,A.y,.4,0,0),T(A.x,A.y-30,1.8,1,.18),T(A.x,A.y-60,2,1,.7),T(A.x,A.y-110,2,0,1)];
+  }
+  var an=e.animate(kf,{duration:B?1100:1200,easing:'linear',fill:'forwards'});
+  an.onfinish=function(){e.remove()};
+  if(B&&m.to){setTimeout(function(){var pe=panels[m.to.seat];if(pe){pe.classList.remove('hit');void pe.offsetWidth;pe.classList.add('hit')}},B?440:0)}
+}
 var last=0;
 function frame(t){
   requestAnimationFrame(frame);var dt=Math.min(50,t-last);last=t;
@@ -97,6 +119,7 @@ var TAG0={2:'RESET',3:'GHOST',4:'REVERSE',7:'LOW BLOW',8:'SKIP',10:'BURN',11:'JA
 // card captions follow the room's rules: a 3 is only a "ghost" when 3s are transparent, and so on
 var R=function(){return(view&&view.rules)||{r3:true,r4:true,r8:true,r10:true,four:true,combo:true,jokers:true,parry:true,randomJoker:false,difficulty:'assisted'}};
 var TAG=function(r){return(!TAGK[r]||R()[TAGK[r]])?TAG0[r]:undefined};
+var REACTIONS=['\uD83D\uDD95','\uD83D\uDE02','\uD83D\uDE21','\uD83D\uDE2D','\uD83D\uDC4D','\uD83D\uDC4F','\uD83D\uDD25','\uD83D\uDC80','\uD83E\uDD21','\uD83D\uDE08','\uD83D\uDE4F','\uD83E\uDEE1'];
 var HANDX=330,RESX=890,PILE={x:640,y:300},DECK={x:885,y:300},BURN={x:1400,y:-80},HAND={x:640,y:600},RES={x:62,y:640};
 var SLOT={
   left:{x:140,y:236,res:'below',wedge:'polygon(640px 300px,0px 20px,0px 500px)'},
@@ -204,7 +227,7 @@ function layout(o){
 
 // ---------- HUD
 function buildPanels(){
-  var host=$('#panels');host.innerHTML='';panels={};var n=view.players.length;oppSeats=[];for(var k=1;k<n;k++)oppSeats.push((view.you+k)%n);
+  var host=$('#panels');host.innerHTML='';rxui.innerHTML='';panels={};var n=view.players.length;oppSeats=[];for(var k=1;k<n;k++)oppSeats.push((view.you+k)%n);
   var names=SLOTSETS[oppSeats.length]||SLOTSETS[5];
   OPP=names.map(function(nm){var P=Object.assign({},SLOT[nm]);if(nm==='top'&&names.length===5)P.res='under';return P});
   oppSeats.forEach(function(seat,i){
@@ -215,8 +238,27 @@ function buildPanels(){
     el.addEventListener('click',function(){if(view.spectator)return sim.send({type:'cam',seat:seat});var pj=view.pendingJoker;if(pj&&!view.rules.randomJoker&&!pj.parry&&pj.by===view.you)sim.send({type:'joker',target:seat})});
     if(view.spectator)el.style.cursor='pointer';
     host.appendChild(el);panels[seat]=el;
+    if(!view.spectator){ // a little badge on the panel's corner opens the emoji picker for that player
+      var b=document.createElement('button');b.className='rxbtn';b.textContent='\uD83D\uDE00';b.title='React to '+view.players[seat].name;b.setAttribute('aria-label','React to '+view.players[seat].name);
+      b.style.left=(OPP[i].x-96)+'px';b.style.top=(OPP[i].y-36)+'px';
+      b.addEventListener('click',function(e){e.stopPropagation();openPicker(seat,OPP[i].x-96,OPP[i].y-36)});
+      rxui.appendChild(b);
+    }
   });
 }
+var rxui=document.createElement('div');rxui.className='layer';rxui.style.zIndex=6;fxL.parentNode.appendChild(rxui);
+function closePicker(){var o=rxui.querySelector('.rxpick');if(o)o.remove()}
+function openPicker(seat,bx,by){
+  var had=rxui.querySelector('.rxpick');closePicker();if(had&&had.dataset.seat==seat)return;
+  var d=document.createElement('div');d.className='rxpick';d.dataset.seat=seat;
+  d.style.left=Math.max(8,Math.min(W-292,bx-146))+'px';d.style.top=(by+22)+'px';
+  REACTIONS.forEach(function(e){var b=document.createElement('button');b.textContent=e;b.setAttribute('aria-label','Send '+e);
+    b.addEventListener('click',function(ev){ev.stopPropagation();sim.send({type:'react',emoji:e,to:seat});closePicker()});d.appendChild(b)});
+  d.addEventListener('pointerdown',function(e){e.stopPropagation()});
+  rxui.appendChild(d);
+}
+document.addEventListener('pointerdown',function(e){if(!(e.target.closest&&e.target.closest('.rxbtn')))closePicker()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closePicker()});
 function shortRule(r){
   if(r.indexOf('Anything')===0)return'FREE HIT: ANYTHING GOES';
   if(r.indexOf('7 or lower')===0)return'LOW BLOW: 7 OR UNDER';
@@ -490,6 +532,7 @@ window.Game={
   push:function(v,events){queue=queue.then(function(){return sim.onState(v,events)}).catch(function(e){console.error(e)})},
   error:function(msg){sim.onError(msg)},
   reset:function(){queue=Promise.resolve();clearAll();view=null;lastCount=-1;maxDeck=0;$('#over').classList.remove('on');$('#parry').style.display='none';hold=null;sel=[];busy=false},
+  react:react,
   view:function(){return view},
   show:function(on){$('#fit').style.display=on?'block':'none'}
 };
