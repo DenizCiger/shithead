@@ -275,7 +275,9 @@ function comboOrder(ids){
 }
 function lower(c){sel=sel.filter(function(id){return id!==c.id})}
 function stackTo(x,y,dur){hold.ids.forEach(function(id,i){var sp=sprites.get('c'+id);if(sp)put(sp,{x:x-i*12,y:y-i*12,r:-4+i*5,s:1.12,z:900-i},{dur:dur})});xn.style.transform='translate('+(x+56)+'px,'+(y-110)+'px)'}
-function doThrow(){if(!sel.length||busy||!myTurn())return;var ids=comboOrder(sel);sel=[];throwCards(ids)}
+// an uneven 6/7 mix (6,6,7) can be selected on the way to 6,6,7,7, but is never thrown
+function unevenCombo(ids){var six=0,sev=0;ids.forEach(function(id){var r=byId(id).rank;if(r===6)six++;else if(r===7)sev++});return six>0&&sev>0&&six!==sev}
+function doThrow(){if(!sel.length||busy||!myTurn())return;var ids=comboOrder(sel);if(unevenCombo(ids)){nope(null,'6, 7 PAIRS ONLY');layout();return}sel=[];throwCards(ids)}
 stage.addEventListener('pointerdown',function(e){
   if(!view||busy)return;if(e.target.closest&&e.target.closest('button,.panel'))return;
   var el=e.target.closest&&e.target.closest('.card'),p=pt(e);

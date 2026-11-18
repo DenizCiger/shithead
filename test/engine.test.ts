@@ -90,6 +90,12 @@ test('67 where the 6 completes four of a kind: the whole throw burns and you go 
   const n = ok(E.play(s, 0, s.players[0]!.hand.slice(0, 2).map((c) => c.id)));
   assert.equal(n.pile.length, 0); assert.equal(n.current, 0); assert.equal(n.burnedCount, 5);
 });
+test('67 on two 6s: the 7s in between break up four of a kind, no burn', () => {
+  const s = mk([[C(6), C(6, 'S'), C(7), C(7, 'S'), C(9)], [C(5)]], [C(6, 'D'), C(6, 'C')]);
+  const [s1, s2, v1, v2] = s.players[0]!.hand.map((c) => c.id) as [number, number, number, number];
+  const n = ok(E.play(s, 0, [s1, v1, s2, v2]));
+  assert.deepEqual(n.pile.map((c) => c.rank), [6, 6, 6, 7, 6, 7]); assert.equal(n.current, 1);
+});
 test('67 combo: legal moves offer only 6,7 pairs', () => {
   const s = mk([[C(6), C(6, 'S'), C(7), C(9)], [C(5)]], [C(5)]);
   const byId = new Map(s.players[0]!.hand.map((c) => [c.id, c.rank]));

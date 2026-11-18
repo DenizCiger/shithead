@@ -32,7 +32,7 @@ export interface Rules {
   r8: boolean; // 8 skips the next player
   r10: boolean; // 10 is always playable and burns the pile
   four: boolean; // four of a kind in a row burns the pile
-  combo: boolean; // a 6 may be followed by a 7 in one throw (the "67"), repeatable as 6,7,6,7…; three pairs burn
+  combo: boolean; // a 6 may be followed by a 7 in one throw (the "67"), repeatable as 6,7,6,7…; three pairs burn; the 7s break up four of a kind
   randomJoker: boolean; // the joker's target is drawn at random instead of chosen
   /** assisted: unplayable cards dimmed; normal: not dimmed, blocked; expert: playing an illegal card takes the pile */
   difficulty: Difficulty;
@@ -616,7 +616,7 @@ export function legalMoves(s: State, seat: number): Action[] {
     const ids: number[] = [];
     for (let k = 0; k < Math.min(sixes.length, sevens.length); k++) {
       ids.push(sixes[k]!.id, sevens[k]!.id);
-      out.push({ t: 'play', ids: [...ids] });
+      if (play(s, seat, ids).ok) { out.push({ t: 'play', ids: [...ids] }); }
     }
   }
   return out;
