@@ -14,7 +14,11 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
-interface Seat { name: string; token: string; ws: WebSocket | null; bot?: boolean }
+interface Seat {
+  name: string; token: string; ws: WebSocket | null; bot?: boolean;
+  offSince?: number; // when the socket dropped; feeds the votekick offline grace
+  lastAct?: number; // last accepted game action; feeds the loadout-phase AFK clock
+}
 interface Spec { name: string; token: string; ws: WebSocket | null; cam: number }
 interface Assist { autoTake: boolean; autoOne: boolean; autoStack: boolean }
 /** Room settings: the host edits these in the lobby; the engine only ever sees `rules`. */
@@ -30,8 +34,18 @@ interface Room {
   botTimer?: NodeJS.Timeout;
   speed: number; // host-set game speed multiplier; shortens the bots' thinking time
   chat: ChatMsg[]; // recent in-room chat, replayed to whoever (re)joins
+  vote?: Vote; // at most one votekick at a time
+  seenGame?: E.State | null; // the game state turnSince was last stamped for
+  turnSince: number; // when the game last changed, i.e. when it started waiting on whoever acts now
+  afkTimer?: NodeJS.Timeout; // rebroadcasts when somebody becomes kickable or a vote runs out
 }
-interface ChatMsg { name: string; seat: number /* -1 = spectator */; text: string; t: number }
+interface ChatMsg { name: string; seat: number /* -1 = spectator */; text: string; t: number; sys?: boolean }
+/** Votekick, mid-game only. Ballots are keyed by token so seat moves cannot mix them up. */
+interface Vote { token: string /* target */; name: string; why: Why; yes: Set<string>; no: Set<string>; ends: number; expired?: boolean }
+type Why = 'offline' | 'afk';
+const KICK_OFFLINE_MS = Number(process.env.KICK_OFFLINE_MS ?? 20_000);
+const KICK_AFK_MS = Number(process.env.KICK_AFK_MS ?? 60_000);
+const VOTE_MS = Number(process.env.VOTE_MS ?? 30_000);
 const CHAT_KEEP = 50, CHAT_MAX = 200;
 const REACTIONS = ['🖕', '😂', '😡', '😭', '👍', '👏', '🔥', '💀', '🤡', '😈', '🙏', '🫡', '🫀', '🍅'];
 const rooms = new Map<string, Room>();
@@ -80,7 +94,8 @@ function view(room: Room, who: Viewer) {
     spectator: !!spec,
     host: token === room.hostToken,
     hostSeat: room.seats.findIndex((s) => s.token === room.hostToken),
-    seats: room.seats.map((s, i) => ({ seat: i, name: s.name, connected: !!s.ws || !!s.bot, bot: !!s.bot })),
+    seats: room.seats.map((s, i) => ({ seat: i, name: s.name, connected: !!s.ws || !!s.bot, bot: !!s.bot, kickable: kickWhy(room, i) })),
+    vote: voteView(room, token),
     settings: { ...room.settings, autoDecks: E.defaultDecks(Math.max(2, room.seats.length)) },
     specs: room.specs.map((s, i) => ({ idx: i, name: s.name, connected: !!s.ws, host: s.token === room.hostToken, me: s === spec })),
   };
@@ -120,11 +135,108 @@ function view(room: Room, who: Viewer) {
 }
 
 function broadcast(room: Room, events?: Ev[]) {
-  room.lastActive = Date.now();
+  const now = Date.now();
+  room.lastActive = now;
+  if (room.game !== room.seenGame) { room.seenGame = room.game; room.turnSince = now; }
+  checkVote(room, now);
   const out = (ws: WebSocket | null, who: Viewer) => send(ws, events ? { ...view(room, who), events } : view(room, who));
   room.seats.forEach((s, i) => out(s.ws, { seat: i }));
   room.specs.forEach((sp) => out(sp.ws, { spec: sp }));
   scheduleBots(room);
+  scheduleAfk(room);
+}
+
+function postChat(room: Room, m: ChatMsg) {
+  room.chat.push(m);
+  if (room.chat.length > CHAT_KEEP) room.chat.shift();
+  for (const x of [...room.seats, ...room.specs]) send(x.ws, { type: 'chat', msg: m });
+}
+const sysMsg = (text: string): ChatMsg => ({ name: '', seat: -1, text, t: Date.now(), sys: true });
+
+// ---------------------------------------------------------------- votekick
+
+/** Since when the game has been waiting on this seat, or undefined if it is not waiting on it. */
+function idleSince(room: Room, i: number): number | undefined {
+  const g = room.game;
+  if (g?.phase === 'swap') return g.players[i]!.ready ? undefined : room.seats[i]!.lastAct ?? room.turnSince; // others swapping must not reset it
+  if (g?.phase === 'playing') return E.actingSeat(g) === i ? room.turnSince : undefined;
+  return undefined; // finished: nobody's turn, only offline counts
+}
+
+/** Why a seat may be voted out right now (mid-game only), or null. */
+function kickWhy(room: Room, i: number, now = Date.now()): Why | null {
+  const s = room.seats[i];
+  if (!room.game || !s || s.bot) return null;
+  if (!s.ws && now - (s.offSince ?? now) >= KICK_OFFLINE_MS) return 'offline';
+  return now - (idleSince(room, i) ?? now) >= KICK_AFK_MS ? 'afk' : null;
+}
+
+/** Ms until the next seat becomes kickable or the running vote times out, so clients learn about it without polling. */
+function nextFlip(room: Room, now: number): number | null {
+  let best = Infinity;
+  const at = (t: number) => { if (t > now && t < best) best = t; };
+  room.seats.forEach((s, i) => {
+    if (s.bot) return;
+    if (!s.ws && s.offSince !== undefined) at(s.offSince + KICK_OFFLINE_MS);
+    const t = idleSince(room, i);
+    if (t !== undefined) at(t + KICK_AFK_MS);
+  });
+  if (room.vote) at(room.vote.ends);
+  return best === Infinity ? null : best - now;
+}
+
+function scheduleAfk(room: Room) {
+  clearTimeout(room.afkTimer); room.afkTimer = undefined;
+  if (!room.game || (!room.seats.some((s) => s.ws) && !room.specs.some((s) => s.ws))) return;
+  const d = nextFlip(room, Date.now());
+  if (d !== null) room.afkTimer = setTimeout(() => { room.afkTimer = undefined; broadcast(room); }, d + 25);
+}
+
+/** Connected human players other than the target: the only ones who vote. */
+const voters = (room: Room, target: string) => room.seats.filter((s) => !s.bot && s.ws && s.token !== target);
+
+/** Settle the running vote: passes on a strict majority of current voters, fails once that is out of reach or time runs out. */
+function checkVote(room: Room, now: number) {
+  const v = room.vote;
+  if (!v) return;
+  const end = (text: string) => { room.vote = undefined; postChat(room, sysMsg(text)); };
+  const ti = room.seats.findIndex((s) => s.token === v.token);
+  if (ti < 0 || !room.game) return end('Vote cancelled.');
+  if (!kickWhy(room, ti, now)) return end(room.game.phase === 'finished' ? 'Vote cancelled.' : `${v.name} is back. Vote cancelled.`);
+  const vs = voters(room, v.token);
+  const yes = vs.filter((s) => v.yes.has(s.token)).length, no = vs.filter((s) => v.no.has(s.token)).length;
+  if (vs.length && yes * 2 > vs.length) {
+    end(`${v.name} was voted out. A bot takes their seat.`);
+    return toBot(room, ti, 'You were voted out: a bot took your seat');
+  }
+  if (!vs.length || (vs.length - no) * 2 <= vs.length || now >= v.ends) return end(`Vote to kick ${v.name} failed.`);
+}
+
+function voteView(room: Room, me: string) {
+  const v = room.vote;
+  if (!v) return null;
+  const vs = voters(room, v.token), ti = room.seats.findIndex((s) => s.token === v.token);
+  return {
+    seat: ti, name: v.name, why: kickWhy(room, ti) ?? v.why,
+    yes: vs.filter((s) => v.yes.has(s.token)).length, no: vs.filter((s) => v.no.has(s.token)).length,
+    need: Math.floor(vs.length / 2) + 1, endsIn: Math.max(0, v.ends - Date.now()),
+    mine: v.yes.has(me) ? 'yes' : v.no.has(me) ? 'no' : null,
+    canVote: vs.some((s) => s.token === me),
+  };
+}
+
+/** Mid-game removal (leave, host kick, passed vote): a bot takes over the seat. The caller broadcasts. */
+function toBot(room: Room, i: number, kickMsg?: string) {
+  const s = room.seats[i]!;
+  if (s.token === room.hostToken) { // the crown goes to a connected player first, then a connected spectator
+    const humans = [...room.seats.filter((x) => !x.bot && x !== s), ...room.specs];
+    const heir = humans.find((x) => x.ws && room.seats.includes(x as Seat)) ?? humans.find((x) => x.ws) ?? humans[0];
+    if (heir) room.hostToken = heir.token;
+  }
+  if (room.vote?.token === s.token) room.vote = undefined;
+  if (kickMsg) send(s.ws, { type: 'kicked', msg: kickMsg });
+  if (s.ws) conns.set(s.ws, {});
+  s.bot = true; s.ws = null; s.offSince = undefined; s.token = randomBytes(12).toString('hex');
 }
 
 // ---------------------------------------------------------------- bots
@@ -212,7 +324,7 @@ interface Conn { room?: Room; seat?: number; spec?: Spec }
 const conns = new WeakMap<WebSocket, Conn>();
 
 function closeRoom(room: Room) {
-  clearTimeout(room.botTimer);
+  clearTimeout(room.botTimer); clearTimeout(room.afkTimer);
   for (const m of [...room.seats, ...room.specs]) if (m.ws) { send(m.ws, { type: 'closed' }); conns.set(m.ws, {}); }
   rooms.delete(room.code);
 }
@@ -227,7 +339,7 @@ function handle(ws: WebSocket, msg: any) {
     case 'create': {
       const code = genCode();
       const token = randomBytes(12).toString('hex');
-      const room: Room = { code, speed: 1, chat: [], settings: { maxPlayers: E.MAX_PLAYERS, decks: 0, rules: { ...E.AHIF }, assist: { autoTake: false, autoOne: false, autoStack: false } }, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now() };
+      const room: Room = { code, speed: 1, chat: [], settings: { maxPlayers: E.MAX_PLAYERS, decks: 0, rules: { ...E.AHIF }, assist: { autoTake: false, autoOne: false, autoStack: false } }, hostToken: token, specs: [], seats: [], game: null, lastActive: Date.now(), turnSince: Date.now() };
       if (msg.spectate) {
         const sp: Spec = { name: cleanName(msg.name), token, ws, cam: 0 };
         room.specs.push(sp); conn.spec = sp;
@@ -247,10 +359,15 @@ function handle(ws: WebSocket, msg: any) {
         const s = si >= 0 ? room.seats[si]! : room.specs[sj]!;
         if (s.ws && s.ws !== ws) s.ws.close();
         s.ws = ws;
+        if (si >= 0) room.seats[si]!.offSince = undefined;
         conn.room = room; conn.seat = si >= 0 ? si : undefined; conn.spec = sj >= 0 ? room.specs[sj] : undefined;
         send(ws, { type: 'joined', code: room.code, token: s.token, seat: si });
         send(ws, { type: 'chathist', log: room.chat });
         return broadcast(room);
+      }
+      if (msg.token) { // a stale session: this seat was kicked or handed to a bot while they were away
+        send(ws, { type: 'kicked', msg: room.game ? 'Your seat went to a bot. You can rejoin as a spectator.' : 'You were removed from the room' });
+        return;
       }
       const token = randomBytes(12).toString('hex');
       if (msg.spectate) {
@@ -288,11 +405,7 @@ function handle(ws: WebSocket, msg: any) {
     const now = Date.now(), recent = (chatTimes.get(myToken) ?? []).filter((t) => now - t < 5000);
     if (recent.length >= 5) return err('Slow down: too many messages');
     chatTimes.set(myToken, [...recent, now]);
-    const m: ChatMsg = { name: spec ? spec.name : room.seats[seat!]!.name, seat: spec ? -1 : seat!, text, t: now };
-    room.chat.push(m);
-    if (room.chat.length > CHAT_KEEP) room.chat.shift();
-    for (const x of [...room.seats, ...room.specs]) send(x.ws, { type: 'chat', msg: m });
-    return;
+    return postChat(room, { name: spec ? spec.name : room.seats[seat!]!.name, seat: spec ? -1 : seat!, text, t: now });
   }
   if (msg.type === 'react') { // quick emoji, optionally aimed at one seat; not stored, just shown
     if (spec) return err('Spectators cannot react');
@@ -341,6 +454,28 @@ function handle(ws: WebSocket, msg: any) {
     room.seats.push({ name: sp.name, token: sp.token, ws: sp.ws });
     if (sp.ws) { const c = conns.get(sp.ws)!; c.spec = undefined; c.seat = room.seats.length - 1; }
   };
+  if (msg.type === 'votekick') { // any player, mid-game, against an offline or AFK player; starting it counts as a yes
+    const t = Number(msg.seat), target = room.seats[t];
+    if (!room.game || !target || t === seat) return err('Not allowed');
+    const why = kickWhy(room, t);
+    if (!why) return err('Only offline or AFK players can be voted out');
+    if (room.vote) {
+      if (room.vote.token !== target.token) return err('Another vote is running');
+      room.vote.no.delete(myToken); room.vote.yes.add(myToken);
+      return broadcast(room);
+    }
+    room.vote = { token: target.token, name: target.name, why, yes: new Set([myToken]), no: new Set(), ends: Date.now() + VOTE_MS };
+    postChat(room, sysMsg(`${room.seats[seat!]!.name} started a vote to kick ${target.name} (${why === 'afk' ? 'AFK' : 'offline'}).`));
+    return broadcast(room);
+  }
+  if (msg.type === 'vote') {
+    const v = room.vote;
+    if (!v) return err('No vote running');
+    if (v.token === myToken) return err('You cannot vote on yourself');
+    const yes = msg.yes === true;
+    (yes ? v.no : v.yes).delete(myToken); (yes ? v.yes : v.no).add(myToken);
+    return broadcast(room);
+  }
   if (msg.type === 'sit') { // spectator -> player (lobby only)
     if (!spec || room.game) return err('Not allowed');
     if (room.seats.length >= room.settings.maxPlayers) return err('Room is full');
@@ -381,10 +516,8 @@ function handle(ws: WebSocket, msg: any) {
       room.hostToken = heir.token;
     }
     if (spec) room.specs.splice(room.specs.indexOf(spec), 1);
-    else if (room.game) { // mid-game: a bot takes over the seat
-      const me = room.seats[seat!]!;
-      me.bot = true; me.ws = null; me.token = randomBytes(12).toString('hex');
-    } else { room.seats.splice(seat!, 1); reindex(); }
+    else if (room.game) toBot(room, seat!); // mid-game: a bot takes over the seat
+    else { room.seats.splice(seat!, 1); reindex(); }
     send(ws, { type: 'left' });
     free(ws);
     return broadcast(room);
@@ -415,6 +548,7 @@ function handle(ws: WebSocket, msg: any) {
     if (!r.ok) return err(r.error);
     const before = room.game;
     room.game = r.state;
+    room.seats[seat!]!.lastAct = Date.now();
     broadcast(room, before ? deriveEvents(before, r.state, seat!, msg) : undefined);
   };
 
@@ -424,6 +558,7 @@ function handle(ws: WebSocket, msg: any) {
       if (room.game && room.game.phase !== 'finished') return err('Already started');
       if (room.seats.length < E.MIN_PLAYERS) return err('Need at least 2 players');
       room.game = E.newGame(room.seats.map((s) => s.name), Math.random, room.settings.decks || undefined, room.settings.rules);
+      room.seats.forEach((s) => { s.lastAct = Date.now(); });
       return broadcast(room, [{ t: 'deal' }]);
     case 'lobby': // back to lobby after a game
       if (!isHost) return err('Only the host can do that');
@@ -439,7 +574,14 @@ function handle(ws: WebSocket, msg: any) {
         if (gone.ws) conns.set(gone.ws, {});
         return broadcast(room);
       }
-      if (room.game) return err('Not allowed');
+      if (room.game) { // mid-game: a bot takes the seat, like leaving
+        const t = Number(msg.seat), target = room.seats[t];
+        if (!target || target.token === room.hostToken) return err('Bad seat');
+        if (target.bot) return err('Bots only play');
+        postChat(room, sysMsg(`${spec ? spec.name : room.seats[seat!]!.name} kicked ${target.name}. A bot takes their seat.`));
+        toBot(room, t, 'You were kicked: a bot took your seat');
+        return broadcast(room);
+      }
       const t = Number(msg.seat);
       if (!room.seats[t] || room.seats[t]!.token === room.hostToken) return err('Bad seat');
       const [gone] = room.seats.splice(t, 1);
@@ -510,7 +652,7 @@ wss.on('connection', (ws) => {
     const { room, seat, spec } = conns.get(ws) ?? {};
     if (!room) return;
     const s = spec ?? (seat === undefined ? undefined : room.seats[seat]);
-    if (s && s.ws === ws) { s.ws = null; broadcast(room); }
+    if (s && s.ws === ws) { s.ws = null; if (!spec) (s as Seat).offSince = Date.now(); broadcast(room); }
   });
   ws.on('error', () => {});
 });
@@ -520,7 +662,7 @@ setInterval(() => {
   for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.ping();
   const now = Date.now();
   for (const [code, r] of rooms)
-    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws) && r.specs.every((s) => !s.ws)) { clearTimeout(r.botTimer); rooms.delete(code); }
+    if (now - r.lastActive > 6 * 3600_000 && r.seats.every((s) => !s.ws) && r.specs.every((s) => !s.ws)) { clearTimeout(r.botTimer); clearTimeout(r.afkTimer); rooms.delete(code); }
 }, 25_000);
 
 server.listen(PORT, () => console.log(`Shithead server on http://localhost:${PORT}`));

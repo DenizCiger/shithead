@@ -129,7 +129,7 @@ var SLOT={
   topR:{x:900,y:62,res:'right',wedge:'polygon(640px 300px,670px 0px,1130px 0px)'}
 },SLOTSETS={1:['top'],2:['left','right'],3:['left','top','right'],4:['left','topL','topR','right'],5:['left','topL','top','topR','right']},OPP=[],WME='polygon(640px 300px,120px 720px,1160px 720px)';
 function resPos(P){if(P.res==='right')return{x:P.x+170,y:P.y};if(P.res==='left')return{x:P.x-270,y:P.y};if(P.res==='under')return{x:P.x-44,y:P.y+128};return{x:P.x-44,y:P.y+122}}
-var maxDeck=0,sprites=new Map(),view=null,swapSel=null,spawnFrom=null,lastDownK=0,busy=false,oppSeats=[],panels={};
+var maxDeck=0,sprites=new Map(),view=null,swapSel=null,spawnFrom=null,lastDownK=0,busy=false,oppSeats=[],panels={},kbtns={};
 function jit(n,a){var x=Math.sin(n*127.1+a*311.7)*43758.5453;return((x-Math.floor(x))-.5)*2*a}
 function faceEl(c){
   var f=document.createElement('div');f.className='face';
@@ -227,7 +227,7 @@ function layout(o){
 
 // ---------- HUD
 function buildPanels(){
-  var host=$('#panels');host.innerHTML='';rxui.innerHTML='';panels={};var n=view.players.length;oppSeats=[];for(var k=1;k<n;k++)oppSeats.push((view.you+k)%n);
+  var host=$('#panels');host.innerHTML='';rxui.innerHTML='';panels={};kbtns={};var n=view.players.length;oppSeats=[];for(var k=1;k<n;k++)oppSeats.push((view.you+k)%n);
   var names=SLOTSETS[oppSeats.length]||SLOTSETS[5];
   OPP=names.map(function(nm){var P=Object.assign({},SLOT[nm]);if(nm==='top'&&names.length===5)P.res='under';return P});
   oppSeats.forEach(function(seat,i){
@@ -244,10 +244,28 @@ function buildPanels(){
       b.addEventListener('click',function(e){e.stopPropagation();openPicker(seat,OPP[i].x-96,OPP[i].y-36)});
       rxui.appendChild(b);
     }
+    // kick badge on the opposite corner: the host kicks outright, players start a vote (hud() decides when it shows)
+    var kb=document.createElement('button');kb.className='rxbtn kbtn';kb.textContent='\uD83D\uDC62';kb.style.display='none';
+    kb.style.left=(OPP[i].x+100)+'px';kb.style.top=(OPP[i].y+34)+'px';
+    kb.addEventListener('click',function(e){e.stopPropagation();openKick(seat,OPP[i].x+100,OPP[i].y+34)});
+    rxui.appendChild(kb);kbtns[seat]=kb;
   });
 }
+function openKick(seat,bx,by){
+  var had=rxui.querySelector('.kpick');closePicker();if(had&&had.dataset.seat==seat)return;
+  var host=view.host,nm=view.players[seat].name,d=document.createElement('div');d.className='kpick';d.dataset.seat=seat;
+  d.style.left=Math.max(8,Math.min(W-318,bx-155))+'px';d.style.top=(by+24)+'px';
+  var t=document.createElement('div');t.className='kt';t.textContent=(host?'KICK ':'VOTE TO KICK ')+nm.toUpperCase()+'?';
+  var p=document.createElement('div');p.className='kp';p.textContent=host?'A bot takes over their seat.':'More than half of the players have to agree. A bot takes over their seat.';
+  var go=document.createElement('button');go.className='kgo';go.textContent=host?'KICK':'START VOTE';
+  go.addEventListener('click',function(ev){ev.stopPropagation();sim.send(host?{type:'kick',seat:seat}:{type:'votekick',seat:seat});closePicker()});
+  var no=document.createElement('button');no.textContent='CANCEL';no.addEventListener('click',function(ev){ev.stopPropagation();closePicker()});
+  var row=document.createElement('div');row.className='kr';row.append(go,no);d.append(t,p,row);
+  d.addEventListener('pointerdown',function(e){e.stopPropagation()});
+  rxui.appendChild(d);
+}
 var rxui=document.createElement('div');rxui.className='layer';rxui.style.zIndex=6;fxL.parentNode.appendChild(rxui);
-function closePicker(){var o=rxui.querySelector('.rxpick');if(o)o.remove()}
+function closePicker(){rxui.querySelectorAll('.rxpick,.kpick').forEach(function(o){o.remove()})}
 function openPicker(seat,bx,by){
   var had=rxui.querySelector('.rxpick');closePicker();if(had&&had.dataset.seat==seat)return;
   var d=document.createElement('div');d.className='rxpick';d.dataset.seat=seat;
@@ -281,6 +299,12 @@ function hud(){
     var el=panels[p.seat];if(!el)return;var out=!p.active&&v.phase!=='swap';
     el.classList.toggle('cur',v.phase==='playing'&&!v.pendingJoker&&v.current===p.seat);el.classList.toggle('out',out);el.classList.toggle('ready',v.phase==='swap'&&p.ready);el.classList.toggle('offline',!!(v.seats[p.seat]&&!v.seats[p.seat].connected));
     el.querySelector('.st').textContent=out?'OUT':'READY';
+    var s=v.seats[p.seat]||{},kb=kbtns[p.seat];el.classList.toggle('afk',s.kickable==='afk'&&!!s.connected);
+    if(kb){ // host: any human, any time mid-game. players: offline/AFK targets, while no other vote runs
+      var can=!s.bot&&(v.host||(!v.spectator&&!!s.kickable&&!v.vote));kb.style.display=can?'':'none';
+      var lbl=(v.host?'Kick ':'Vote to kick ')+p.name;kb.title=lbl;kb.setAttribute('aria-label',lbl);
+      if(!can&&rxui.querySelector('.kpick[data-seat="'+p.seat+'"]'))closePicker();
+    }
   });
   document.body.classList.toggle('choosing',choosing);
   cardsL.classList.toggle('dim',v.phase==='playing'&&!mt);

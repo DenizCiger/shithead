@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var $ = function (s) { return document.querySelector(s); };
-  var screen = $('#screen'), modalEl = $('#modal'), toastEl = $('#toast'), connEl = $('#conn');
+  var screen = $('#screen'), modalEl = $('#modal'), toastEl = $('#toast'), connEl = $('#conn'), voteEl = $('#vote');
   screen.classList.add('lb'); modalEl.classList.add('lb');
   var COL = ['#ffe600', '#ff2e88', '#19e3ff', '#ff7a1a', '#7dff3a', '#b266ff'];
   var ws, st = null, connected = false, session = null, name = localStorage.getItem('shithead-name') || '';
@@ -39,7 +39,7 @@
       } else if (m.type === 'chat') { window.Chat.add(m.msg);
       } else if (m.type === 'react') { window.Game.react(m);
       } else if (m.type === 'chathist') { window.Chat.history(m.log);
-      } else if (m.type === 'kicked') { forget(); toast('You were removed from the room');
+      } else if (m.type === 'kicked') { forget(); toast(m.msg || 'You were removed from the room');
       } else if (m.type === 'closed') { forget(); toast('The room was closed');
       } else if (m.type === 'left') { forget(); }
     };
@@ -221,8 +221,33 @@
         h('button', { class: 'btn pink', onclick: function () { send({ type: 'leave', close: true }); } }, 'CLOSE ROOM FOR ALL'), stay));
   }
 
+  // ---------------------------------------------------------------- votekick banner (top left, mid-game)
+  var voteEnd = 0, voteTick = null;
+  function tickVote() {
+    var s = voteEl.querySelector('.vs');
+    if (s) s.textContent = Math.max(0, Math.ceil((voteEnd - Date.now()) / 1000)) + 's';
+  }
+  function renderVote() {
+    var v = st && session && st.phase !== 'lobby' ? st.vote : null;
+    voteEl.classList.toggle('on', !!v);
+    if (!v) { clearInterval(voteTick); voteTick = null; voteEl.replaceChildren(); return; }
+    voteEnd = Date.now() + v.endsIn;
+    var me = !st.spectator && v.seat === st.you;
+    function ballot(yes) {
+      return h('button', { class: (yes ? 'y' : 'n') + (v.mine === (yes ? 'yes' : 'no') ? ' on' : ''), onclick: function () { send({ type: 'vote', yes: yes }); } }, yes ? 'YES' : 'NO');
+    }
+    voteEl.replaceChildren(h('div', { class: 'vbox' },
+      h('div', { class: 'vh' }, h('span', { class: 'grow cut' }, me ? 'VOTE TO KICK YOU' : 'KICK ' + v.name.toUpperCase() + '?'), h('span', { class: 'vw' }, v.why === 'afk' ? 'AFK' : 'OFFLINE')),
+      me && h('div', { class: 'vp' }, st.phase === 'swap' ? 'Hit READY to stay in the game.' : 'Make a move to stay in the game.'),
+      h('div', { class: 'vt' }, h('span', {}, 'YES ' + v.yes + '/' + v.need), h('span', {}, 'NO ' + v.no), h('span', { class: 'vs' })),
+      v.canVote && h('div', { class: 'vb' }, ballot(true), ballot(false))));
+    tickVote();
+    if (!voteTick) voteTick = setInterval(tickVote, 250);
+  }
+
   // ---------------------------------------------------------------- render
   function render() {
+    renderVote();
     var inGame = !!(st && session && st.phase !== 'lobby');
     window.Game.show(inGame);
     document.body.classList.toggle('inroom', !!(st && session));

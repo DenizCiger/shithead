@@ -196,3 +196,28 @@ body:not(.ingame) #chat{bottom:86px}
 .rxpick button:hover{border-color:var(--y);background:#1a1a1f}
 .rxfly{position:absolute;left:0;top:0;pointer-events:none;z-index:80;display:flex;flex-direction:column;align-items:center;margin:-38px 0 0 -70px;width:140px;opacity:0}
 .rxfly span{font-size:76px;line-height:1;filter:drop-shadow(0 6px 0 rgba(0,0,0,.55))}
+
+/* votekick: boot badge on opponent panels, confirm popover, top-left ballot */
+.kbtn{border-color:var(--m)}
+.kbtn:hover{background:var(--m)}
+.panel.afk .nm::after{content:' (AFK)';font-size:14px}
+.kpick{position:absolute;width:310px;padding:10px 12px 12px;background:#0b0b0d;border:4px solid var(--m);box-shadow:6px 6px 0 #000;pointer-events:auto;color:#fff}
+.kpick .kt{font-size:24px;line-height:1.1}
+.kpick .kp{font:600 13px/1.35 system-ui,sans-serif;font-style:normal;color:#ccc;margin:6px 0 10px}
+.kpick .kr,#vote .vb{display:flex;gap:8px}
+.kpick button,#vote button{font:inherit;font-size:20px;padding:3px 14px 4px;border:3px solid #000;box-shadow:4px 4px 0 #000;background:#fff;color:#000;cursor:pointer;transform:skewX(-10deg)}
+.kpick button.kgo,#vote button.y.on{background:var(--m);color:#fff}
+#vote button.n.on{background:var(--c)}
+.kpick button:active,#vote button:active{transform:skewX(-10deg) translate(3px,3px);box-shadow:1px 1px 0 #000}
+#vote{display:none;position:fixed;left:14px;top:12px;z-index:210;width:min(300px,calc(100vw - 140px));padding:8px 12px 10px;background:#000;border:4px solid var(--m);box-shadow:6px 6px 0 #000;color:#fff}
+#vote.on{display:block;animation:vin .2s ease-out}
+@keyframes vin{0%{transform:translateX(-24px);opacity:0}}
+#vote .vh{display:flex;align-items:center;gap:8px;font-size:22px;line-height:1.1}
+#vote .grow{flex:1;min-width:0}
+#vote .cut{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vote .vw{font-size:13px;background:var(--m);padding:1px 6px;flex:none}
+#vote .vp{font:600 13px system-ui,sans-serif;font-style:normal;color:var(--y);margin-top:4px}
+#vote .vt{display:flex;gap:14px;font-size:17px;color:#ccc;margin:6px 0 8px}
+#vote .vs{margin-left:auto;color:var(--y)}
+#vote:not(:has(.vb)) .vt{margin-bottom:0}
+#chatfeed .cm.sys,#chatlog .cm.sys{color:var(--y);font-style:italic}

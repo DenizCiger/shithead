@@ -8,6 +8,7 @@
 
   function line(m) {
     var d = document.createElement('div'); d.className = 'cm';
+    if (m.sys) { d.className = 'cm sys'; d.textContent = m.text; return d; } // server notices (votes, kicks)
     var n = document.createElement('b'); n.textContent = m.name;
     n.style.color = m.seat >= 0 ? COL[m.seat % 6] : '#aaa';
     var t = document.createElement('span'); t.textContent = ' ' + m.text; // textContent only: never HTML

@@ -8,7 +8,7 @@ const PORT = 4300 + Math.floor(Math.random() * 500);
 let proc: ChildProcess;
 
 before(async () => {
-  proc = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], { env: { ...process.env, PORT: String(PORT), BOT_DELAY: '15' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  proc = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], { env: { ...process.env, PORT: String(PORT), BOT_DELAY: '15', KICK_OFFLINE_MS: '100', KICK_AFK_MS: '1500', VOTE_MS: '800' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise<void>((res) => proc.stdout!.on('data', (d) => String(d).includes('Shithead server') && res()));
 });
 after(() => { proc.kill(); });
@@ -210,4 +210,88 @@ test('react: players reach everyone (spectators watch), spectators cannot send, 
   await until(() => rx(h).length === 3);
   assert.equal(rx(h)[2].emoji, '👍');
   assert.equal(rx(h)[2].to, null);
+});
+
+// ---------------------------------------------------------------- kicking mid-game
+const tokenOf = (c: Client) => c.inbox.find((m) => m.type === 'joined')!.token as string;
+const notices = (c: Client) => c.inbox.filter((m) => m.type === 'chat' && m.msg.sys).map((m) => m.msg.text as string);
+async function playing(n: number) {
+  const { h, code } = await room('A');
+  const cs = [h];
+  for (const nm of ['B', 'C', 'D'].slice(0, n - 1)) cs.push(await joined(code, nm));
+  h.send({ type: 'start' });
+  for (const c of cs) { await c.until((s) => s.phase === 'swap'); c.send({ type: 'ready' }); }
+  await h.until((s) => s.phase === 'playing');
+  return { cs, code };
+}
+
+test('host kick mid-game: a bot takes the seat, the kicked session is told when it comes back', async () => {
+  const { cs: [h, b, c], code } = await playing(3);
+  const old = tokenOf(b);
+  h.send({ type: 'kick', seat: 0 }); assert.match((await h.nextError())!, /Bad seat/);
+  c.send({ type: 'kick', seat: 1 }); assert.match((await c.nextError())!, /Not allowed/);
+  h.send({ type: 'kick', seat: 1 });
+  const s = await c.until((s) => s.seats[1].bot);
+  assert.equal(s.phase, 'playing');
+  assert.ok(b.inbox.some((m) => m.type === 'kicked'));
+  assert.ok(notices(c).some((t) => /kicked B/.test(t)));
+  const back = await connect(); back.send({ type: 'join', code, token: old, name: 'B' });
+  const t0 = Date.now(); while (!back.inbox.some((m) => m.type === 'kicked') && Date.now() - t0 < 1000) await new Promise((r) => setTimeout(r, 10));
+  assert.match(back.inbox.find((m) => m.type === 'kicked')!.msg, /spectator/);
+});
+
+test('votekick: online players are safe, a reconnect cancels, majority passes, a timeout fails', async () => {
+  const { cs: [h, b, c, d], code } = await playing(4);
+  const actor = h.st!.current;
+  const idle = [0, 1, 2, 3].find((i) => i !== actor && i !== 1)!; // online and not on turn: never kickable
+  b.send({ type: 'votekick', seat: idle }); assert.match((await b.nextError())!, /offline or AFK/);
+  const dTok = tokenOf(d);
+  d.ws.close();
+  await b.until((s) => s.seats[3].kickable === 'offline');
+  b.send({ type: 'votekick', seat: 3 });
+  let s = await c.until((s) => !!s.vote);
+  assert.deepEqual([s.vote.seat, s.vote.yes, s.vote.need, s.vote.canVote], [3, 1, 2, true]);
+  c.send({ type: 'votekick', seat: actor === 0 ? 1 : 0 }); // a second vote cannot open alongside
+  const d2 = await connect(); d2.send({ type: 'join', code, token: dTok, name: 'D' }); // D is back
+  await c.until((s) => !s.vote && s.seats[3].connected);
+  assert.ok(notices(c).some((t) => /D is back/.test(t)));
+  d2.ws.close();
+  await b.until((s) => s.seats[3].kickable === 'offline');
+  b.send({ type: 'votekick', seat: 3 });
+  await c.until((s) => !!s.vote);
+  await c.until((s) => !s.vote, 3000); // nobody else votes: runs out
+  assert.ok(notices(c).some((t) => /failed/.test(t)));
+  b.send({ type: 'votekick', seat: 3 });
+  await c.until((s) => s.vote?.yes === 1);
+  c.send({ type: 'vote', yes: true });
+  s = await h.until((s) => s.seats[3].bot && !s.vote);
+  assert.ok(notices(h).some((t) => /D was voted out/.test(t)));
+});
+
+test('votekick: the host can be voted out and the crown moves on; an AFK player who moves is safe', async () => {
+  const { cs: [h, b, c, d] } = await playing(4);
+  h.ws.close();
+  await b.until((s) => s.seats[0].kickable === 'offline');
+  b.send({ type: 'votekick', seat: 0 });
+  await c.until((s) => s.vote?.need === 2);
+  c.send({ type: 'vote', yes: false }); d.send({ type: 'vote', yes: false }); // 1 yes, 2 no out of 3: cannot pass
+  await b.until((s) => !s.vote);
+  b.send({ type: 'votekick', seat: 0 });
+  await c.until((s) => s.vote?.yes === 1 && s.vote?.no === 0);
+  c.send({ type: 'vote', yes: true });
+  const s = await b.until((s) => s.seats[0].bot);
+  assert.equal(s.host, true); // first connected player takes the crown
+  // the game waits on whoever is on turn; once idle long enough they can be voted out, until they move
+  const cur = await b.until((s) => s.phase === 'playing' && !s.pendingJoker && !s.seats[s.current].bot, 8000);
+  const all = [b, c, d], me = all[cur.current - 1]!, other = all.find((x) => x !== me)!;
+  await other.until((s) => s.seats[cur.current].kickable === 'afk' && s.current === cur.current, 4000);
+  other.send({ type: 'votekick', seat: cur.current });
+  const v = await me.until((s) => !!s.vote);
+  assert.equal(v.vote.canVote, false); // the target does not vote on themselves
+  const m = me.st!;
+  const zone = m.zone === 'hand' ? m.hand : m.players[m.you].up;
+  const card = zone.find((x: any) => m.playable.includes(x.rank));
+  me.send(card ? { type: 'play', ids: [card.id] } : m.canPickup ? { type: 'pickup' } : { type: 'play', ids: [m.downIds[0]] });
+  await other.until((s) => !s.vote);
+  assert.ok(notices(other).some((t) => /is back/.test(t)));
 });
