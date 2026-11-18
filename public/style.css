@@ -194,7 +194,8 @@ body.inroom #chatbtn{display:block}
 @keyframes shot{0%{transform:scale(0) rotate(-25deg)}14%{transform:scale(1.2) rotate(6deg)}24%{transform:scale(1) rotate(0)}42%{transform:translateY(-14px) rotate(0)}68%{transform:translateY(-40px) rotate(-115deg)}86%{transform:translateY(-40px) rotate(-115deg);opacity:1}100%{transform:translateY(-10px) rotate(-20deg) scale(.6);opacity:0}}
 @keyframes drain{0%,42%{height:82%}68%,100%{height:0}}
 /* drunk after the shot, a bit like nausea: the table stretches wide and tall, leans, blurs, and the edges glow purple-green.
-   Only transforms, blur and opacity, which stay cheap. Reduced effects tone it down, minimal keeps only the edges. */
+   The blur redraws the whole table every frame while cards move, which can cost a weak phone frames.
+   Reduced effects tone it down, minimal drops the blur and keeps only the edges. */
 #stage.wonky{filter:blur(1.2px) saturate(1.4);animation:nausea 4.2s ease-in-out infinite}
 body.fx1 #stage.wonky{filter:blur(.7px) saturate(1.2);animation-name:nausea-lite}
 body.fx0 #stage.wonky{filter:none;animation:none}

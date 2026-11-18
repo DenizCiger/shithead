@@ -44,6 +44,9 @@ test('events: an expert misplay carries the shot flag', () => {
   const play = { type: 'play', ids: [s0.players[0]!.hand[0]!.id] };
   const evs = deriveEvents(s0, ok(E.play(s0, 0, play.ids)), 0, play);
   assert.deepEqual(evs[0], { t: 'pickup', seat: 0, count: 1, penalty: true, shot: true });
+  s0.rules = E.normalizeRules({ difficulty: 'expert', shot: false });
+  const off = deriveEvents(s0, ok(E.play(s0, 0, play.ids)), 0, play);
+  assert.deepEqual(off[0], { t: 'pickup', seat: 0, count: 1, penalty: true });
 });
 
 
