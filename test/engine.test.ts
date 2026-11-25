@@ -236,6 +236,10 @@ test('expert difficulty: an illegal play takes the pile; other difficulties just
   const n = ok(E.play(s, 0, [s.players[0]!.hand[0]!.id]));
   assert.equal(n.pile.length, 0); assert.equal(n.players[0]!.hand.length, 4); assert.equal(n.current, 1);
 });
+test('shot on misplay only exists on expert', () => {
+  assert.equal(E.normalizeRules({ difficulty: 'expert', shot: true }).shot, true);
+  assert.equal(E.normalizeRules({ difficulty: 'normal', shot: true }).shot, false);
+});
 test('fuzz: random rule sets conserve cards and terminate', () => {
   for (let seed = 1; seed <= 40; seed++) {
     const rng = E.mulberry32(seed + 900);
